@@ -113,7 +113,7 @@ export interface Preflight {
  */
 export async function preflightCall(
   client: DexClient,
-  params: { window: Window; quote: Quote; account: `0x${string}` },
+  params: { window: Window; quote: Quote; account: `0x${string}`; autoApprove?: boolean },
 ): Promise<Preflight> {
   const { window, quote, account } = params;
 
@@ -162,11 +162,26 @@ export async function preflightCall(
     );
   }
 
+  const needsApproval = allowance < quote.escrow;
+
+  // With auto-approve on (the default) the SDK bundles the approval, so a short
+  // allowance is not an error. A browser flow usually wants the opposite: the
+  // user should see an explicit "Approve" step rather than an unexplained second
+  // wallet prompt (AGENTS.md §5). Passing `autoApprove: false` asks for that,
+  // and this is where it surfaces.
+  if (needsApproval && params.autoApprove === false) {
+    throw new DexError(
+      "NEEDS_APPROVAL",
+      `Allowance ${formatFixed(allowance, d, 4)} is below the ${formatFixed(quote.escrow, d, 4)} escrow.`,
+      { action: `Approve ${client.collateral.symbol} for the pool, then place the call.` },
+    );
+  }
+
   return {
     sttBalance: stt,
     collateralBalance: balance,
     allowance,
-    needsApproval: allowance < quote.escrow,
+    needsApproval,
     spender: window.pool,
   };
 }
@@ -192,6 +207,12 @@ export interface CallRequest {
    * gaps at every window roll are a measured reality, not a hypothetical.
    */
   orderType?: number;
+  /**
+   * Default true: the SDK bundles an approval when the allowance is short. Set
+   * false to require an explicit approve step instead — preflight then throws
+   * `NEEDS_APPROVAL` rather than approving behind the user's back.
+   */
+  autoApprove?: boolean;
 }
 
 export interface PreparedCall {
@@ -216,7 +237,10 @@ export async function prepareCall(client: DexClient, req: CallRequest): Promise<
       retryable: true,
     });
   }
-  const preflight = await preflightCall(client, { window: req.window, quote, account: req.account });
+  const preflight = await preflightCall(client, {
+    window: req.window, quote, account: req.account,
+    ...(req.autoApprove !== undefined ? { autoApprove: req.autoApprove } : {}),
+  });
   const { expiresAtSec, userData } = orderTiming(client, req);
 
   const trader = client.exchange.client.createTrader({
@@ -280,7 +304,10 @@ export async function placeCall(client: DexClient, req: CallRequest): Promise<Pl
       retryable: true,
     });
   }
-  await preflightCall(client, { window: req.window, quote, account: req.account });
+  await preflightCall(client, {
+    window: req.window, quote, account: req.account,
+    ...(req.autoApprove !== undefined ? { autoApprove: req.autoApprove } : {}),
+  });
 
   // Re-read the on-chain status immediately before sending: quoting and any
   // user confirmation take real time, and the window may have locked meanwhile.
@@ -309,7 +336,7 @@ export async function placeCall(client: DexClient, req: CallRequest): Promise<Pl
       quantity: quote.quantity,
       orderType: req.orderType ?? ORDER_TYPE_IOC,
       expireTimestampNs: BigInt(expiresAtSec) * 1_000_000_000n,
-      autoApprove: true,
+      autoApprove: req.autoApprove ?? true,
       userData,
     });
   } catch (e) {

@@ -11,8 +11,7 @@
     }
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@somnia-chain/markets-sdk": "^0.28.1",

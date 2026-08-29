@@ -1,0 +1,90 @@
+{
+  "recordedAt": "2026-08-29T17:47:35.500Z",
+  "chainId": 50312,
+  "passed": 16,
+  "warned": 0,
+  "skipped": 0,
+  "failed": 0,
+  "checks": [
+    {
+      "name": "assertLiveNetwork",
+      "status": "pass",
+      "code": "OK"
+    },
+    {
+      "name": "getMarkets",
+      "status": "pass",
+      "code": "OK"
+    },
+    {
+      "name": "getMarkets caches within its TTL",
+      "status": "pass",
+      "code": "OK"
+    },
+    {
+      "name": "invalidateMarkets forces a refetch",
+      "status": "pass",
+      "code": "OK"
+    },
+    {
+      "name": "getWindows",
+      "status": "pass",
+      "code": "OK"
+    },
+    {
+      "name": "getCurrentWindow",
+      "status": "pass",
+      "code": "OK"
+    },
+    {
+      "name": "quoteCall",
+      "status": "pass",
+      "code": "OK"
+    },
+    {
+      "name": "preflightCall",
+      "status": "pass",
+      "code": "OK"
+    },
+    {
+      "name": "prepareCall builds an unsigned tx for browser signing",
+      "status": "pass",
+      "code": "OK"
+    },
+    {
+      "name": "getSettlement",
+      "status": "pass",
+      "code": "OK"
+    },
+    {
+      "name": "statusFor maps settlement + direction to the enum",
+      "status": "pass",
+      "code": "OK"
+    },
+    {
+      "name": "getOutcomeBalance",
+      "status": "pass",
+      "code": "OK"
+    },
+    {
+      "name": "getPositions (explicit marketIds — pure chain path)",
+      "status": "pass",
+      "code": "OK"
+    },
+    {
+      "name": "getPositions (address only — discovers its own markets)",
+      "status": "pass",
+      "code": "OK"
+    },
+    {
+      "name": "preflightCall raises NEEDS_APPROVAL when auto-approve is off",
+      "status": "pass",
+      "code": "OK"
+    },
+    {
+      "name": "subscribe reconciles and reports status",
+      "status": "pass",
+      "code": "OK"
+    }
+  ]
+}

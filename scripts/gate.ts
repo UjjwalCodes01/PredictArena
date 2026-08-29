@@ -138,20 +138,45 @@ async function main(): Promise<void> {
   // ── Phase 1 ───────────────────────────────────────────────────────────────
   heading("4. Phase 1 — packages/dex and the smoke canary");
 
-  push(await check("packages/dex exists and exports the Phase 1 surface", async () => {
+  push(await check("packages/dex exports the Phase 1 surface (imported, not grepped)", async () => {
     const index = resolve(REPO_ROOT, "packages", "dex", "src", "index.ts");
     if (!existsSync(index)) {
       return { status: "fail", code: "NO_DEX_PACKAGE", detail: "packages/dex/src/index.ts is missing.",
         action: "Phase 1 builds the dex package." };
     }
-    const source = readFileSync(index, "utf8");
-    // The API PLAN.md Phase 1 names, plus the error type the UI switches on.
-    const required = ["getMarkets", "getWindows", "placeCall", "getPositions", "getSettlement", "subscribe", "DexError"];
-    const missing = required.filter((name) => !source.includes(name));
-    return missing.length === 0
-      ? { status: "pass", code: "OK", detail: `Exports all ${required.length} Phase 1 entry points.` }
-      : { status: "fail", code: "DEX_INCOMPLETE", detail: `Not exported: ${missing.join(", ")}.`,
-          action: "Finish packages/dex before moving on." };
+    // Importing beats grepping: a name can appear in a comment or a string and
+    // pass a text search while not existing at all.
+    const mod = await import("@predictarena/dex");
+    const required = [
+      "getMarkets", "getWindows", "getCurrentWindow", "quoteCall", "preflightCall",
+      "prepareCall", "placeCall", "getPositions", "getSettlement", "getOutcomeBalance",
+      "redeem", "awaitSettlement", "subscribe", "statusFor", "assertLiveNetwork", "createDexClient",
+    ] as const;
+    const record = mod as unknown as Record<string, unknown>;
+    const missing = required.filter((n) => typeof record[n] !== "function");
+    if (missing.length > 0) {
+      return { status: "fail", code: "DEX_INCOMPLETE", detail: `Not callable: ${missing.join(", ")}.`,
+        action: "Finish packages/dex before moving on." };
+    }
+    if (typeof record["DexError"] !== "function") {
+      return { status: "fail", code: "NO_DEX_ERROR", detail: "DexError is not exported.",
+        action: "The UI switches on DexError.code." };
+    }
+    return { status: "pass", code: "OK", detail: `${required.length} entry points imported and callable, plus DexError.` };
+  }));
+
+  push(await check("Every export has been run against live Shannon", async () => {
+    const marker = resolve(REPO_ROOT, "artifacts", "verify-api.json");
+    if (!existsSync(marker)) {
+      return { status: "warn", code: "NOT_VERIFIED",
+        detail: "No record that the API was exercised against live data.",
+        action: "Run `pnpm verify-api` — a typecheck does not prove a function works." };
+    }
+    const v = JSON.parse(readFileSync(marker, "utf8")) as { failed?: number; passed?: number; recordedAt?: string };
+    return (v.failed ?? 1) === 0
+      ? { status: "pass", code: "OK", detail: `${v.passed} entry point(s) ran live at ${v.recordedAt}.` }
+      : { status: "fail", code: "API_BROKEN", detail: `${v.failed} entry point(s) failed against live data.`,
+          action: "Run `pnpm verify-api` and fix them." };
   }));
 
   push(await check("Smoke run recorded a live round-trip", async () => {

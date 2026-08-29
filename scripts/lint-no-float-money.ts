@@ -49,7 +49,8 @@ function isMoneyFile(path: string, source: string): boolean {
 
 function stripCommentsAndStrings(line: string): string {
   return line
-    .replace(/\/\/.*$/, "")
+    // Lookbehind so a URL's "//" is not treated as a comment marker.
+    .replace(/(?<!:)\/\/.*$/, "")
     .replace(/\/\*.*?\*\//g, "")
     .replace(/(['"`])(?:\\.|(?!\1)[^\\])*\1/g, '""');
 }

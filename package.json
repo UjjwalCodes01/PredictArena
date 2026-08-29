@@ -13,10 +13,11 @@
     "doctor": "tsx scripts/doctor.ts",
     "survey": "tsx scripts/survey.ts",
     "smoke": "tsx scripts/smoke.ts",
+    "verify-api": "tsx scripts/verify-api.ts",
     "claim": "tsx scripts/claim.ts",
     "gate": "tsx scripts/gate.ts",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint . && tsx scripts/lint-no-float-money.ts",
+    "lint": "eslint . && tsx scripts/lint-no-float-money.ts && tsx scripts/lint-no-mainnet.ts",
     "test": "vitest run"
   },
   "dependencies": {

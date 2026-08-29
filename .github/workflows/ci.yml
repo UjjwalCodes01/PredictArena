@@ -36,7 +36,7 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Lint (includes the no-float-money rule)
+      - name: Lint (eslint + no-float-money + no-mainnet)
         run: pnpm lint
 
       - name: Unit tests
@@ -54,15 +54,3 @@ jobs:
             exit 1
           fi
           echo "No secrets in tracked files."
-
-      - name: Assert no mainnet configuration
-        run: |
-          # Matches outside the guard code that exists precisely to refuse these.
-          if git grep -nE 'api\.infra\.mainnet\.somnia\.network|prd\.smk\.somnia\.host|api\.dreamdex\.io' \
-               -- . ':!packages/dex/src/config.ts' ':!packages/dex/src/__tests__/**' ':!docs/**' ':!*.md' >/dev/null 2>&1; then
-            echo "::error::A mainnet endpoint appears outside the guard code."
-            git grep -nE 'api\.infra\.mainnet\.somnia\.network|prd\.smk\.somnia\.host|api\.dreamdex\.io' \
-               -- . ':!packages/dex/src/config.ts' ':!packages/dex/src/__tests__/**' ':!docs/**' ':!*.md'
-            exit 1
-          fi
-          echo "No mainnet endpoints outside the guard."

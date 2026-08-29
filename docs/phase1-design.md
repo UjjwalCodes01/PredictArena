@@ -78,10 +78,12 @@ imports.
 
 `pnpm smoke` completed a live round-trip on Shannon, twice:
 
-| Run | Asset | Fill | Settled | Outcome | Redeem |
+| Run | Asset | Fill | Settled | Outcome | Order tx |
 |---|---|---|---|---|---|
-| 1 | BTC 300s | 1.0270 @ 94.9% | 123s | **WON** | +1.0270 tUSDC |
-| 2 | BTC 300s | 3.7170 @ 20.5% | 273s | LOST | n/a (no claim on a loss) |
+| 1 | BTC 300s | 1.0270 @ 94.9% | 123s | **WON**, +1.0270 tUSDC | `0xa417c983…efca61e` |
+| 2 | BTC 300s | 3.7170 @ 20.5% | 273s | LOST (no claim on a loss) | `0xdaeb6ec0…c42b3fde` |
+
+Redeem for run 1: `0x3f54dfce…32b58460`. All three verified present and successful on-chain.
 
 A LOST outcome is still a PASS: the gate is a completed round-trip, not a
 winning bet. Run 1 also captured the full status transition — 1 Trading → 2
@@ -98,3 +100,128 @@ red.
 asset list is not the fixed pair the specs assume. Nothing hard-codes it (the
 UI will render whatever `getMarkets()` reports), but the demo should stay on
 BTC/ETH, where liquidity is consistent.
+
+
+---
+
+## Implementation audit
+
+A pass specifically for hardcoded or unverified values. Three real problems, all fixed.
+
+### 1. The collateral symbol was displayed but never verified ⚠️
+
+`COLLATERAL_SYMBOL = "tUSDC"` was a constant, and `assertLiveNetwork()` read the symbol from the
+token contract **but only compared the decimals**. So `client.collateral.symbol` returned the
+hardcoded string no matter what was actually deployed — every balance in the CLI (and later the UI)
+would have been labelled `tUSDC` even if the chain disagreed. That is showing the user something the
+chain never confirmed.
+
+Fixed: the constants are renamed `EXPECTED_COLLATERAL_*`, a mismatch on **either** symbol or
+decimals is now fatal, and after verification the client carries the chain's own values. Confirmed
+live: `chain 50312, collateral tUSDC (6 dp)` — both now read, not assumed.
+
+### 2. The gas ceiling was a magic number
+
+`GAS_CEILING_WEI = 600_000_000_000_000_000n` was correct but frozen. It is now derived —
+`SDK_DEFAULT_GAS * DEFAULT_FEES.maxFeePerGas` — from the SDK's own exported fee config, so it tracks
+the SDK instead of silently going stale. The 10M gas limit is the one number the SDK documents but
+does not export at runtime, so it is mirrored and pinned by a test.
+
+### 3. The Phase 1 gate grepped for names instead of importing
+
+The gate checked `index.ts` for the strings `"getPositions"`, `"subscribe"` and so on. Those names
+appeared in the gate's own required-list literal — so the check could pass on a package that
+exported neither. Worse, five exports (`getCurrentWindow`, `prepareCall`, `getPositions`,
+`subscribe`, `invalidateMarkets`) had **never executed**: they typechecked and nothing more.
+
+Fixed two ways. The gate now imports the module and asserts each entry point is callable. And
+`pnpm verify-api` runs all 16 exports against live Shannon, writing
+`artifacts/verify-api.json` as evidence the gate then requires.
+
+That run also produced a genuine finding: `preflightCall` reported **allowance SHORT — approval
+pre-step required**, and `prepareCall` correctly returned an approval alongside the unsigned order.
+The `NEEDS_APPROVAL` path AGENTS.md predicted is real and works.
+
+### What the audit confirmed was already sound
+
+- **One** hardcoded address in the whole codebase: the mainnet collateral, which exists only to be
+  refused. Every other address comes from the SDK.
+- **No venue id is pinned anywhere** — they are discovered at runtime. The six documented in
+  dex-notes §5 were re-checked against the live indexer and all six are still serving.
+- No mock, stub, placeholder or TODO in `packages/dex` or `scripts/`.
+- Every tx hash cited in the docs was re-fetched from the chain: all present, all `status=success`.
+- No silent fallback fabricates a value. The `?? 0` cases are interval defaults feeding
+  `headroomSecFor`, which clamps to a conservative 15s — a safe default, not invented data.
+
+### Still unverified, and honestly so
+
+- **The VOID redemption path.** `redeem()` handles a void, and `getPositions` prices it at 0.5 per
+  contract per the docs, but no void has been redeemed on-chain here. Voids are common on the 60s
+  series, so this is testable — it just has not happened yet.
+- **`prepareCall` produces an unsigned transaction that has never been signed by a browser wallet.**
+  It builds correctly and carries the approval step; the wagmi round-trip belongs to Phase 3.
+- **`subscribe` has been exercised only through a forced `reconcile()`**, not across a real
+  disconnect. The backoff curve is unit-tested; the reconnect behaviour under a live socket drop is
+  a Phase 4 resilience drill.
+
+
+---
+
+## Phase 1 re-check
+
+A second pass against PLAN.md's literal wording rather than my own summary. Four more real defects.
+
+### 4. CI would have failed on its own assertion 🔴
+
+The exit gate is "`pnpm smoke` passes **and CI green**". Replaying the workflow locally, the
+`Assert no mainnet configuration` step **failed**: it `git grep`ed for mainnet hostnames and hit
+`.env.example`, where those hosts appear in comments explaining that they are rejected. The check
+could not tell a warning from a setting.
+
+Fixed by moving it into a comment-aware `scripts/lint-no-mainnet.ts` that runs as part of
+`pnpm lint`. CI replayed clean afterwards in 12s, well inside the 2-minute budget.
+
+### 5. Both linters were blind to URLs 🔴
+
+`lint-no-mainnet` reported clean with `https://api.infra.mainnet.somnia.network` sitting in a file.
+The comment stripper ran `line.replace(/\/\/.*$/, "")` — and `https://` **contains** `//`, so the
+URL was truncated to `https:` and the host disappeared before the check ever saw it. A safety check
+that silently cannot see the thing it guards against is worse than no check.
+
+Fixed with a negative lookbehind (`/(?<!:)\/\/.*$/`) in both linters, and verified by planting a
+real violation of each kind.
+
+### 6. `NEEDS_APPROVAL` was a dead code
+
+PLAN.md lists it among the required `DexError` codes. It existed in the union and in one comment,
+and was never thrown — `placeCall` always passed `autoApprove: true`, so a short allowance was
+silently approved.
+
+That is wrong for the web app: AGENTS.md §5 wants an explicit Approve step in the UI, not an
+unexplained second wallet prompt. `CallRequest` now takes `autoApprove` (default true), and with it
+`false` a short allowance raises `NEEDS_APPROVAL`. Confirmed live — the DEV wallet's allowance was
+genuinely short and the code fired.
+
+### 7. `getPositions(address)` did not exist as specified
+
+PLAN.md specifies `getPositions(address)`. The implementation required the caller to pass
+`marketIds`, so there was no way to answer "what does this wallet hold?" from an address alone.
+
+`marketIds` is now optional: omitted, the markets are discovered via `getClaimable(account)` and
+then verified on-chain. The explicit path is kept because it needs no indexer at all, and an indexer
+failure on the discovery path raises `API_DOWN` rather than returning an empty list that would read
+as "you have no positions".
+
+## Honest scorecard
+
+| PLAN.md Phase 1 | State |
+|---|---|
+| pnpm workspace | **Partial** — `packages/dex`, `scripts`, `docs` exist; `packages/db`, `apps/web`, `apps/indexer` deliberately deferred to the phases that fill them |
+| First commit of AGENTS/CLAUDE/.env.example/.gitignore | **Already committed** by the repo owner; this phase's work is **uncommitted** |
+| CI: typecheck + lint + tests, under 2 min | **Written and replayed locally in 12s** — but it has never actually run on GitHub |
+| `packages/dex` full API | **Done** — 16/16 exports executed against live Shannon |
+| `DexError` codes | **Done** — all 8 present and all reachable |
+| Request queue, jittered retry, bigint | **Done**, unit-tested |
+| `scripts/smoke.ts` | **Done** — two live round-trips |
+| Exit gate: smoke exits 0 | **Met** |
+| Exit gate: CI green | **Not provable until it runs on GitHub** |

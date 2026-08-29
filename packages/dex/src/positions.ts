@@ -97,19 +97,36 @@ export async function getOutcomeBalance(
 }
 
 /**
- * Positions for a wallet across the given markets.
+ * Positions for a wallet.
  *
- * Markets must be supplied by the caller (Phase 2's indexer knows which windows
- * a wallet touched). This function deliberately does not depend on the
- * indexer's Portfolio query, which is the piece that failed in Phase 0.
+ * `marketIds` is optional. Supply them when you already know which windows the
+ * wallet touched (Phase 2's indexer will) — that path is pure chain reads and
+ * cannot be broken by an indexer outage. Omit them and the markets are
+ * discovered through the indexer first, which is convenient but is exactly the
+ * query that failed mid-run in Phase 0 — so its failure raises `API_DOWN` with
+ * the explicit path named, rather than quietly returning an empty list that
+ * would read as "you have no positions".
  */
 export async function getPositions(
   client: DexClient,
-  params: { account: `0x${string}`; marketIds: readonly `0x${string}`[] },
+  params: { account: `0x${string}`; marketIds?: readonly `0x${string}`[] },
 ): Promise<Position[]> {
+  let marketIds = params.marketIds;
+
+  if (!marketIds) {
+    try {
+      const claimable = await client.queue.run(() =>
+        client.exchange.client.getClaimable(params.account),
+      );
+      marketIds = [...new Set(claimable.map((c) => c.marketId as `0x${string}`))];
+    } catch (e) {
+      throw asDexError(e, "API_DOWN");
+    }
+  }
+
   const out: Position[] = [];
 
-  for (const marketId of params.marketIds) {
+  for (const marketId of marketIds) {
     const settlement = await getSettlement(client, marketId);
     const onchain = await client.queue.run(() => client.exchange.client.getMarketOnchain(marketId));
 

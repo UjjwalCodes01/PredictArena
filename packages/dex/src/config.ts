@@ -8,7 +8,7 @@
  * collateral token, and the endpoint hostnames — so all three are asserted, and
  * nothing else in the codebase is trusted to do it.
  */
-import { SOMNIA_TESTNET_ADDRESSES } from "@somnia-chain/markets-sdk";
+import { SOMNIA_TESTNET_ADDRESSES, DEFAULT_FEES } from "@somnia-chain/markets-sdk";
 import { somniaShannon } from "@somnia-chain/markets-sdk/chains";
 import { DexError } from "./errors.js";
 
@@ -31,19 +31,30 @@ export const MAINNET_COLLATERAL = "0x00000022da000002656c64d9ea6011ea952d008a";
 
 /**
  * Testnet collateral: tUSDC, 6 decimals. NOT USDso — that token is mainnet-only
- * and has no bytecode on Shannon. Verified on-chain: name "Test USDC".
+ * and has no bytecode on Shannon.
+ *
+ * These are EXPECTATIONS, not truth. `assertLiveNetwork()` reads both from the
+ * token contract and refuses to continue if either differs, then replaces the
+ * symbol on the client with the chain's own value — so nothing ever displays a
+ * label the chain did not confirm.
  */
-export const COLLATERAL_DECIMALS = 6 as const;
-export const COLLATERAL_SYMBOL = "tUSDC" as const;
+export const EXPECTED_COLLATERAL_DECIMALS = 6 as const;
+export const EXPECTED_COLLATERAL_SYMBOL = "tUSDC" as const;
 
 /**
- * The SDK sends every write with a fixed 10M gas ceiling at 60 gwei and never
- * estimates. The mempool admits a transaction only when that ceiling is funded
- * on top of its value, so a wallet needs ~0.6 STT present even though the
- * unused remainder is refunded. Checking for "> 0" would pass a wallet that
+ * The SDK sends every write with a fixed gas ceiling and never estimates, and
+ * the mempool admits a transaction only when that ceiling is funded on top of
+ * its value. So a wallet needs the whole envelope present even though the
+ * unused remainder is refunded — checking for "> 0" would pass a wallet that
  * still cannot transact.
+ *
+ * Derived, not hardcoded: the fee comes from the SDK's own `DEFAULT_FEES`, so
+ * if the SDK changes its gas price this constant follows. The 10M gas limit is
+ * the SDK's `DEFAULT_GAS`, which it documents but does not export at runtime —
+ * so that single number is mirrored here and asserted in the tests.
  */
-export const GAS_CEILING_WEI = 600_000_000_000_000_000n;
+export const SDK_DEFAULT_GAS = 10_000_000n;
+export const GAS_CEILING_WEI = SDK_DEFAULT_GAS * DEFAULT_FEES.maxFeePerGas;
 
 export const SHANNON = somniaShannon;
 export const TESTNET_ADDRESSES = SOMNIA_TESTNET_ADDRESSES;

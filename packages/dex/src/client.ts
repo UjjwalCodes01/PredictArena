@@ -9,7 +9,7 @@ import { createPublicClient, http, erc20Abi } from "viem";
 import type { PublicClient, WalletClient, Account } from "viem";
 import {
   SHANNON, TESTNET_ADDRESSES, TESTNET_CHAIN_ID, MAINNET_CHAIN_ID, MAINNET_COLLATERAL,
-  COLLATERAL_DECIMALS, COLLATERAL_SYMBOL, ELWOOD_CHAIN_ID, assertTestnetConfig,
+  EXPECTED_COLLATERAL_DECIMALS, EXPECTED_COLLATERAL_SYMBOL, ELWOOD_CHAIN_ID, assertTestnetConfig,
 } from "./config.js";
 import { DexError, asDexError } from "./errors.js";
 import { RequestQueue, type QueueOptions } from "./queue.js";
@@ -38,14 +38,20 @@ export interface DexClient {
   readonly rpc: PublicClient;
   readonly queue: RequestQueue;
   readonly clock: ServerClock;
+  /**
+   * Symbol and decimals are the EXPECTED values until `assertLiveNetwork()`
+   * runs; after it, they are what the token contract actually reports. Read
+   * them for display only once `verified` is true.
+   */
   readonly collateral: { address: `0x${string}`; symbol: string; decimals: number };
   /** True once `assertLiveNetwork` has confirmed the chain and collateral. */
   readonly verified: boolean;
   close(): void;
 }
 
-interface MutableDexClient extends Omit<DexClient, "verified"> {
+interface MutableDexClient extends Omit<DexClient, "verified" | "collateral"> {
   verified: boolean;
+  collateral: { address: `0x${string}`; symbol: string; decimals: number };
 }
 
 export function createDexClient(config: DexConfig): DexClient {
@@ -93,7 +99,11 @@ export function createDexClient(config: DexConfig): DexClient {
     rpc,
     queue,
     clock,
-    collateral: { address: collateralAddress, symbol: COLLATERAL_SYMBOL, decimals: COLLATERAL_DECIMALS },
+    collateral: {
+      address: collateralAddress,
+      symbol: EXPECTED_COLLATERAL_SYMBOL,
+      decimals: EXPECTED_COLLATERAL_DECIMALS,
+    },
     verified: false,
     close() {
       try {
@@ -145,14 +155,27 @@ export async function assertLiveNetwork(client: DexClient): Promise<{
     ]),
   );
 
-  if (decimals !== client.collateral.decimals) {
+  if (decimals !== EXPECTED_COLLATERAL_DECIMALS) {
     throw new DexError(
       "UNKNOWN",
-      `Collateral decimals changed: chain says ${decimals}, this package assumes ${client.collateral.decimals}.`,
+      `Collateral decimals changed: chain says ${decimals}, this package expects ${EXPECTED_COLLATERAL_DECIMALS}.`,
       { action: "Every money path depends on this. Stop and re-verify docs/dex-notes.md §2." },
     );
   }
+  // The symbol is an identity check, not decoration: the address is baked into
+  // the SDK at ITS release, so a different token sitting there means the
+  // deployment moved under us. Displaying a label the chain never confirmed
+  // would be showing the user something false.
+  if (symbol !== EXPECTED_COLLATERAL_SYMBOL) {
+    throw new DexError(
+      "UNKNOWN",
+      `Collateral at ${client.collateral.address} reports "${symbol}", expected "${EXPECTED_COLLATERAL_SYMBOL}".`,
+      { action: "The collateral deployment changed. Re-verify addresses before trading." },
+    );
+  }
 
+  // From here on, what we display is what the chain said.
+  mutable.collateral = { ...client.collateral, symbol, decimals };
   await client.clock.sync();
   mutable.verified = true;
   return { chainId, collateralSymbol: symbol, collateralDecimals: decimals };

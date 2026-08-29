@@ -120,7 +120,9 @@ BTC  int=3600s   exp=+32.5m   Trading    BTC  int=60s   exp=-0.5m      Finalized
 ```
 
 Confirmed facts:
-1. **BTC and ETH windows are live now.** The product is buildable today.
+1. **BTC and ETH windows are live now.** The product is buildable today. (A third asset,
+   `DECEDO`, appeared later — `getMarkets()` reports whatever exists, and nothing hard-codes the
+   pair, but the demo should stay on BTC/ETH where liquidity is consistent.)
 2. **Multiple concurrent durations per asset: 60s, 300s, 1h, 4h, 24h.** Our specs assume one generic
    "window". The UI must pick a series — **recommend the 5-minute (300s) series** for the demo: fast
    enough that a settlement lands inside a 2–3 min video, slow enough to place a call deliberately.

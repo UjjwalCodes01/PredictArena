@@ -62,3 +62,20 @@ describe("assertTestnetConfig", () => {
       .toThrow(DexError);
   });
 });
+
+describe("derived constants", () => {
+  it("derives the gas ceiling from the SDK's own fee config, not a magic number", async () => {
+    const { GAS_CEILING_WEI, SDK_DEFAULT_GAS } = await import("../config.js");
+    const { DEFAULT_FEES } = await import("@somnia-chain/markets-sdk");
+    expect(GAS_CEILING_WEI).toBe(SDK_DEFAULT_GAS * DEFAULT_FEES.maxFeePerGas);
+    // Sanity: the measured envelope really is ~0.6 STT at the SDK's defaults.
+    expect(GAS_CEILING_WEI).toBe(600_000_000_000_000_000n);
+  });
+
+  it("pins the SDK gas limit the SDK documents but does not export", async () => {
+    // If this ever drifts, GAS_CEILING_WEI silently stops matching reality —
+    // hence the assertion rather than a comment.
+    const { SDK_DEFAULT_GAS } = await import("../config.js");
+    expect(SDK_DEFAULT_GAS).toBe(10_000_000n);
+  });
+});

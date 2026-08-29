@@ -34,6 +34,7 @@ data/
 # only public chain data. `pnpm gate` reads it.
 artifacts/*
 !artifacts/phase0-probe.json
+!artifacts/verify-api.json
 
 # ── Editors / OS ─────────────────────────────────────────────────────────────
 .DS_Store
