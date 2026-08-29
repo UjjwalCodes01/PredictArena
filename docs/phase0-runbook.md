@@ -46,11 +46,11 @@ holding 0.1 STT looks funded and still gets refused.
 ```bash
 pnpm faucet           # mints tUSDC on-chain — no web faucet needed for collateral
 pnpm doctor           # 20 read-only checks; signs nothing
-pnpm place-one        # THE EXIT GATE: one real order -> settlement -> redeem
-pnpm gate             # verifies all three gate conditions against reality
+pnpm smoke            # THE EXIT GATE: one real call -> settlement -> redeem
+pnpm gate             # verifies the Phase 0 and Phase 1 gates against reality
 ```
 
-To rehearse without signing anything: `pnpm place-one --dry-run`.
+To rehearse without signing anything: `pnpm smoke --dry-run`.
 
 Health checks at any time — all read-only: `pnpm doctor`, `pnpm survey`, `pnpm gate`, `pnpm test`.
 
@@ -65,8 +65,10 @@ Health checks at any time — all read-only: `pnpm doctor`, `pnpm survey`, `pnpm
 | `pnpm doctor` | Safety rail, chain identity, collateral identity, contract bytecode, indexer reachability + lag, venue discovery, live series map, window selection, book params, liquidity, wallet balances, unclaimed winnings. Reports everything wrong in one pass. |
 | `pnpm survey` | Every live window with on-chain status and both sides of the book. Run this before recording a demo — liquidity gaps at every window roll. |
 | `pnpm test` | Money-math unit tests (vitest). |
-| `pnpm place-one` | Places ONE real order and follows it to settlement and redemption. `--dry-run`, `--claim-only`, `--side up\|down`, `--asset BTC\|ETH`, `--interval 300`, `--yes`. Writes `artifacts/phase0-probe.json`. |
-| `pnpm gate` | Checks the three exit-gate conditions. Exit code 0 only when Phase 0 is genuinely done. |
+| `pnpm smoke` | The canary: one real call followed to settlement and redemption, entirely through `packages/dex`. `--dry-run`, `--no-redeem`, `--direction up\|down`, `--asset`, `--interval`, `--stake`. Writes `artifacts/phase0-probe.json`. |
+| `pnpm claim` | Sweeps unredeemed winnings. Chain-first, so an indexer outage cannot strand them. |
+| `pnpm gate` | Checks the Phase 0 and Phase 1 exit gates. Exit code 0 only when both are genuinely met. |
+| `pnpm typecheck` / `pnpm lint` | Must pass before any commit. `lint` includes the no-float-money rule. |
 
 ---
 

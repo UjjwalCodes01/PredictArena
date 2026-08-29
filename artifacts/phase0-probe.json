@@ -1,36 +1,36 @@
 {
-  "recordedAt": "2026-08-29T14:55:37.560Z",
+  "recordedAt": "2026-08-29T16:30:02.775Z",
   "chainId": 50312,
   "wallet": "0xf06243d774F3872F974F3d01da55C2E050F2B542",
-  "asset": "ETH",
+  "asset": "BTC",
   "intervalSec": 300,
-  "marketId": "0x000000000000000000000000000000000000000000000000000000000000ced1",
-  "pool": "0x90D2E2BFb0BC2128595C0405a878165204B5650E",
-  "venueId": "0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c",
-  "question": "ETH closes at or above its opening price",
-  "strike": "0",
-  "expiry": "1788015600",
+  "marketId": "0x000000000000000000000000000000000000000000000000000000000000cfda",
+  "pool": "0x9E5FabfAa60BA4d7534440D534Fc10f222646F81",
+  "venueId": "0x1a1e6821cde7d0159c0d293177871e09677b4e42307c7db3ba94f8648a5a050f",
+  "question": "Pricefeed test: will BTC/USDC's price be at or above 77959.45 at unix time 1788021000?",
+  "strike": "7795945",
+  "expiry": "1788021000",
   "side": "BUY_YES",
   "stakeTusdc": "1.000000",
-  "limitPrice": "571000",
-  "quantity": "1751000",
-  "escrow": "999821",
-  "orderTxHash": "0x0b50ef59e3ffcc0aa4b600d346e0c4c9d342af3a08c1b26b9a21d81568d54836",
+  "limitPrice": "269000",
+  "quantity": "3717000",
+  "escrow": "999873",
+  "orderTxHash": "0xdaeb6ec0e39a995505505198c768b6286a33fe6c3c22abd346027c21c42b3fde",
   "orderStatus": "filled",
   "fills": [
     {
-      "quantity": "1751000",
-      "price": "554000"
+      "quantity": "3717000",
+      "price": "205000"
     }
   ],
   "settlement": {
     "status": "RESOLVED",
-    "winningOutcome": 0
+    "winningOutcome": 1
   },
-  "outcome": "WON",
-  "redeemTxHash": "0x7163316bb86ec4d36912de7c33a7788bcb982cf2fcb9cb4ed61a987a827cd303",
-  "payoutTusdc": "1.751000",
+  "outcome": "LOST",
+  "redeemTxHash": null,
+  "payoutTusdc": null,
   "notes": [
-    "Redeem ran in a separate --claim-only pass: the indexer Portfolio query failed transiently during the first attempt. Chain-first redeem added afterwards so this cannot strand winnings again."
+    "Written by `pnpm smoke` — a full live round-trip through packages/dex."
   ]
 }

@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+# A new push supersedes an in-flight run on the same branch.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: typecheck · lint · test
+    runs-on: ubuntu-latest
+    # Everything here is offline and pure: no testnet, no keys, no RPC. That is
+    # what keeps CI fast and green regardless of testnet weather.
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint (includes the no-float-money rule)
+        run: pnpm lint
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Assert no secrets committed
+        run: |
+          if git ls-files --error-unmatch .env 2>/dev/null; then
+            echo "::error::.env is tracked. Remove it and rotate every key in it."
+            exit 1
+          fi
+          if git grep -nE '(PRIVATE_KEY|SECRET)[[:space:]]*=[[:space:]]*0x[0-9a-fA-F]{64}' -- . ':!*.example' >/dev/null 2>&1; then
+            echo "::error::A private key appears in a tracked file."
+            git grep -nE '(PRIVATE_KEY|SECRET)[[:space:]]*=[[:space:]]*0x[0-9a-fA-F]{64}' -- . ':!*.example'
+            exit 1
+          fi
+          echo "No secrets in tracked files."
+
+      - name: Assert no mainnet configuration
+        run: |
+          # Matches outside the guard code that exists precisely to refuse these.
+          if git grep -nE 'api\.infra\.mainnet\.somnia\.network|prd\.smk\.somnia\.host|api\.dreamdex\.io' \
+               -- . ':!packages/dex/src/config.ts' ':!packages/dex/src/__tests__/**' ':!docs/**' ':!*.md' >/dev/null 2>&1; then
+            echo "::error::A mainnet endpoint appears outside the guard code."
+            git grep -nE 'api\.infra\.mainnet\.somnia\.network|prd\.smk\.somnia\.host|api\.dreamdex\.io' \
+               -- . ':!packages/dex/src/config.ts' ':!packages/dex/src/__tests__/**' ':!docs/**' ':!*.md'
+            exit 1
+          fi
+          echo "No mainnet endpoints outside the guard."

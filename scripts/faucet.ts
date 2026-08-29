@@ -19,9 +19,8 @@
 import { privateKeyToAccount } from "viem/accounts";
 import { erc20Abi } from "viem";
 import { createWalletClient, http } from "viem";
-import { getPrivateKey, WALLET_SLOTS, LINKS, explorerTx, type WalletSlot } from "./lib/config.js";
-import { createDexOrExit, assertLiveTestnet } from "./lib/dex.js";
-import { formatFixed, formatStt } from "./lib/money.js";
+import { assertLiveNetwork, explorerTx, formatFixed, formatStt, SHANNON, type DexClient } from "@predictarena/dex";
+import { createClientOrExit, getPrivateKey, WALLET_SLOTS, LINKS, type WalletSlot } from "./lib/env.js";
 import { bold, dim, green, yellow, red, heading, kv, describeError } from "./lib/log.js";
 
 const ARGS = process.argv.slice(2);
@@ -53,7 +52,7 @@ const FUND_SEEDS = ARGS.includes("--fund-seeds");
  * they all originate from the DEV key, and two senders on one key race each
  * other's nonce.
  */
-async function fundSeedsFromDev(dex: ReturnType<typeof createDexOrExit>): Promise<void> {
+async function fundSeedsFromDev(dex: DexClient): Promise<void> {
   const devKey = getPrivateKey("DEV");
   if (!devKey) {
     console.log(`  ${red("✘")} DEV_PRIVATE_KEY is empty — nothing to fund from.`);
@@ -75,7 +74,7 @@ async function fundSeedsFromDev(dex: ReturnType<typeof createDexOrExit>): Promis
     return;
   }
 
-  const wallet = createWalletClient({ account: dev, chain: dex.cfg.chain, transport: http(dex.cfg.rpcHttpUrl) });
+  const wallet = createWalletClient({ account: dev, chain: SHANNON, transport: http(dex.config.rpcHttpUrl) });
 
   for (const { slot, key } of targets) {
     const to = privateKeyToAccount(key).address;
@@ -98,12 +97,12 @@ async function main(): Promise<void> {
   console.log(bold("\nPrediction Leagues — tUSDC faucet"));
   console.log(dim("Mints testnet collateral. STT for gas must already be present.\n"));
 
-  const dex = createDexOrExit();
-  const d = dex.cfg.collateral.decimals;
-  const collateral = dex.cfg.collateral.address;
+  const { client: dex } = createClientOrExit();
+  const d = dex.collateral.decimals;
+  const collateral = dex.collateral.address;
 
   try {
-    await assertLiveTestnet(dex);
+    await assertLiveNetwork(dex);
     if (!collateral) throw new Error("SDK exposed no collateral address.");
 
     if (FUND_SEEDS) {

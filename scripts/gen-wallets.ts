@@ -15,7 +15,7 @@
 import { existsSync, readFileSync, writeFileSync, chmodSync, copyFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { ENV_PATH, REPO_ROOT, WALLET_SLOTS, LINKS, type WalletSlot } from "./lib/config.js";
+import { ENV_PATH, REPO_ROOT, WALLET_SLOTS, LINKS, type WalletSlot } from "./lib/env.js";
 import { bold, dim, green, yellow, red, heading, kv } from "./lib/log.js";
 
 const force = process.argv.includes("--force");

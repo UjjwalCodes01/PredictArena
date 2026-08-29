@@ -1,8 +1,8 @@
 {
-  "name": "prediction-leagues",
+  "name": "predictarena",
   "private": true,
-  "version": "0.0.0",
-  "description": "Prediction Leagues \u2014 social league on DreamDEX Event Contracts (Somnia Shannon testnet)",
+  "version": "0.1.0",
+  "description": "Prediction Leagues \u2014 a social league on DreamDEX Event Contracts (Somnia Shannon testnet)",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -12,20 +12,26 @@
     "faucet": "tsx scripts/faucet.ts",
     "doctor": "tsx scripts/doctor.ts",
     "survey": "tsx scripts/survey.ts",
-    "place-one": "tsx scripts/place-one.ts",
-    "gate": "tsx scripts/phase0-gate.ts",
+    "smoke": "tsx scripts/smoke.ts",
+    "claim": "tsx scripts/claim.ts",
+    "gate": "tsx scripts/gate.ts",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint . && tsx scripts/lint-no-float-money.ts",
     "test": "vitest run"
   },
   "dependencies": {
+    "@predictarena/dex": "workspace:*",
     "@somnia-chain/markets-sdk": "^0.28.1",
     "dotenv": "^17.2.3",
     "viem": "^2.40.0"
   },
   "devDependencies": {
-    "@types/node": "^26.4.0",
+    "@eslint/js": "^9.39.1",
+    "@types/node": "^24.10.1",
+    "eslint": "^9.39.1",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.48.1",
     "vitest": "^4.1.11"
   }
 }

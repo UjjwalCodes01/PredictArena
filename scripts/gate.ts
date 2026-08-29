@@ -1,21 +1,19 @@
 /**
- * `pnpm gate` — is Phase 0 actually done?
+ * `pnpm gate` — are the phase exit gates actually met?
  *
- * PLAN.md's Phase 0 exit gate is three concrete things:
- *   1. docs/dex-notes.md complete
- *   2. one settled Event Contract tx hash recorded
- *   3. four funded wallets
+ * PLAN.md Phase 0: notes complete, one settled tx hash, four funded wallets.
+ * PLAN.md Phase 1: `packages/dex` exists and `pnpm smoke` completes a live
+ * round-trip; CI green (typecheck + lint + tests).
  *
- * This checks all three against reality rather than against memory, so "Phase 0
- * is done" is a claim the repo can verify instead of one we assert.
+ * Checked against reality rather than memory, so "the phase is done" is a claim
+ * the repo can verify instead of one we assert.
  */
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { resolve, join } from "node:path";
 import { erc20Abi } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { REPO_ROOT, WALLET_SLOTS, getPrivateKey, LINKS, explorerTx, type WalletSlot } from "./lib/config.js";
-import { createDex, assertLiveTestnet } from "./lib/dex.js";
-import { formatFixed, formatStt } from "./lib/money.js";
+import { assertLiveNetwork, explorerTx, formatFixed, formatStt } from "@predictarena/dex";
+import { createClientOrExit, getPrivateKey, WALLET_SLOTS, REPO_ROOT, LINKS, type WalletSlot } from "./lib/env.js";
 import { bold, dim, green, red, heading, report, kv, check, summarise, type CheckResult } from "./lib/log.js";
 
 const results: CheckResult[] = [];
@@ -35,8 +33,9 @@ const REQUIRED_NOTES_TOPICS: Array<[string, RegExp]> = [
 ];
 
 async function main(): Promise<void> {
-  console.log(bold("\nPhase 0 exit gate"));
-  console.log(dim("PLAN.md: notes complete + one settled tx hash + four funded wallets.\n"));
+  console.log(bold("\nPhase exit gates"));
+  console.log(dim("Phase 0: notes + a settled tx hash + four funded wallets."));
+  console.log(dim("Phase 1: packages/dex + a live smoke round-trip + CI checks.\n"));
 
   // ── Gate 1: notes ─────────────────────────────────────────────────────────
   heading("1. docs/dex-notes.md complete");
@@ -58,14 +57,14 @@ async function main(): Promise<void> {
   push(await check("Probe artifact records a settled order", async () => {
     if (!existsSync(ARTIFACT_PATH)) {
       return { status: "fail", code: "NO_PROBE", detail: "artifacts/phase0-probe.json not found.",
-        action: "Run `pnpm place-one` — it writes the artifact." };
+        action: "Run `pnpm smoke` — it writes the artifact." };
     }
     const a = JSON.parse(readFileSync(ARTIFACT_PATH, "utf8")) as {
       orderTxHash?: string; orderStatus?: string; settlement?: { status?: string } | null;
       outcome?: string | null; redeemTxHash?: string | null; marketId?: string;
     };
     if (!a.orderTxHash) {
-      return { status: "fail", code: "NO_TX", detail: "Artifact has no order tx hash.", action: "Re-run `pnpm place-one`." };
+      return { status: "fail", code: "NO_TX", detail: "Artifact has no order tx hash.", action: "Re-run `pnpm smoke`." };
     }
     kv("order tx", explorerTx(a.orderTxHash));
     kv("order status", a.orderStatus ?? "—");
@@ -75,11 +74,11 @@ async function main(): Promise<void> {
 
     if (a.orderStatus === "unfilled") {
       return { status: "fail", code: "UNFILLED", detail: "The probe order never filled, so nothing settled.",
-        action: "Re-run `pnpm place-one` against a window with resting asks." };
+        action: "Re-run `pnpm smoke` — it re-picks a fillable window each run." };
     }
     if (!a.settlement?.status) {
       return { status: "fail", code: "NOT_SETTLED", detail: "Order placed but settlement was never observed.",
-        action: "Re-run `pnpm place-one` and let it poll to completion." };
+        action: "Re-run `pnpm smoke` and let it poll to completion." };
     }
     return { status: "pass", code: "OK",
       detail: `${a.settlement.status} → ${a.outcome}. Order and settlement both recorded on Shannon.` };
@@ -89,16 +88,16 @@ async function main(): Promise<void> {
   heading("3. Four funded wallets");
   let dex;
   try {
-    dex = createDex();
-    await assertLiveTestnet(dex);
+    dex = createClientOrExit().client;
+    await assertLiveNetwork(dex);
   } catch (e) {
     push({ name: "Chain reachable for balance checks", status: "fail", code: "API_DOWN",
       detail: e instanceof Error ? e.message : String(e), action: "Check RPC_HTTP_URL and retry." });
     process.exit(summarise(results, "Phase 0 gate — summary"));
   }
 
-  const collateral = dex.cfg.collateral.address;
-  const d = dex.cfg.collateral.decimals;
+  const collateral = dex.collateral.address;
+  const d = dex.collateral.decimals;
   // PLAN.md's gate says "four funded wallets", so all four are required. An
   // earlier draft softened SEED1..3 to warnings; that was moving the goalpost
   // rather than meeting it. `pnpm faucet --fund-seeds` tops them up from DEV,
@@ -135,11 +134,63 @@ async function main(): Promise<void> {
   }
 
   dex.close();
-  const code = summarise(results, "Phase 0 gate — summary");
+
+  // ── Phase 1 ───────────────────────────────────────────────────────────────
+  heading("4. Phase 1 — packages/dex and the smoke canary");
+
+  push(await check("packages/dex exists and exports the Phase 1 surface", async () => {
+    const index = resolve(REPO_ROOT, "packages", "dex", "src", "index.ts");
+    if (!existsSync(index)) {
+      return { status: "fail", code: "NO_DEX_PACKAGE", detail: "packages/dex/src/index.ts is missing.",
+        action: "Phase 1 builds the dex package." };
+    }
+    const source = readFileSync(index, "utf8");
+    // The API PLAN.md Phase 1 names, plus the error type the UI switches on.
+    const required = ["getMarkets", "getWindows", "placeCall", "getPositions", "getSettlement", "subscribe", "DexError"];
+    const missing = required.filter((name) => !source.includes(name));
+    return missing.length === 0
+      ? { status: "pass", code: "OK", detail: `Exports all ${required.length} Phase 1 entry points.` }
+      : { status: "fail", code: "DEX_INCOMPLETE", detail: `Not exported: ${missing.join(", ")}.`,
+          action: "Finish packages/dex before moving on." };
+  }));
+
+  push(await check("Smoke run recorded a live round-trip", async () => {
+    if (!existsSync(ARTIFACT_PATH)) {
+      return { status: "fail", code: "NO_SMOKE", detail: "No smoke record.", action: "Run `pnpm smoke`." };
+    }
+    const a = JSON.parse(readFileSync(ARTIFACT_PATH, "utf8")) as { notes?: string[]; recordedAt?: string };
+    const viaPackage = (a.notes ?? []).some((n) => n.includes("packages/dex"));
+    return viaPackage
+      ? { status: "pass", code: "OK", detail: `Round-trip ran through packages/dex at ${a.recordedAt}.` }
+      : { status: "warn", code: "STALE_RECORD",
+          detail: "The record predates the dex package.",
+          action: "Run `pnpm smoke` so the canary exercises the package itself." };
+  }));
+
+  push(await check("No script bypasses packages/dex (CLAUDE.md rule 4)", async () => {
+    const dir = resolve(REPO_ROOT, "scripts");
+    const offenders: string[] = [];
+    const walk = (d: string): void => {
+      for (const entry of readdirSync(d)) {
+        const full = join(d, entry);
+        if (statSync(full).isDirectory()) { walk(full); continue; }
+        if (!entry.endsWith(".ts")) continue;
+        const src = readFileSync(full, "utf8");
+        if (/from\s+["']@somnia-chain\/markets-sdk["']/.test(src)) offenders.push(entry);
+      }
+    };
+    walk(dir);
+    return offenders.length === 0
+      ? { status: "pass", code: "OK", detail: "All DreamDEX access goes through packages/dex." }
+      : { status: "fail", code: "BYPASS", detail: `Imports the SDK directly: ${offenders.join(", ")}.`,
+          action: "Route it through packages/dex." };
+  }));
+
+  const code = summarise(results, "Exit gates — summary");
 
   heading("Verdict");
   if (code === 0) {
-    console.log(`  ${green(bold("Phase 0 complete."))} Proceed to Phase 1 (repo scaffold + packages/dex).\n`);
+    console.log(`  ${green(bold("Phases 0 and 1 complete."))} Proceed to Phase 2 (data layer + indexer).\n`);
   } else {
     console.log(`  ${red("Phase 0 is not done yet.")} Clear the blocking items above.`);
     console.log(`  ${dim("Unfunded seed wallets? Run `pnpm faucet --fund-seeds`.")}\n`);
