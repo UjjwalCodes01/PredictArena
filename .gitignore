@@ -1,0 +1,38 @@
+# ── SECRETS — never commit. CLAUDE.md hard rule 2. ────────────────────────────
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+wallets.json
+secrets/
+
+# ── Node ─────────────────────────────────────────────────────────────────────
+node_modules/
+.pnpm-store/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# ── Build output ─────────────────────────────────────────────────────────────
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# ── Local data (DB is a cache/projection — never a source of truth) ──────────
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+data/
+
+# ── Phase 0 recon artifacts (regenerable; may contain addresses) ─────────────
+artifacts/
+
+# ── Editors / OS ─────────────────────────────────────────────────────────────
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json

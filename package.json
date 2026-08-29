@@ -1,0 +1,29 @@
+{
+  "name": "prediction-leagues",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Prediction Leagues \u2014 social league on DreamDEX Event Contracts (Somnia Shannon testnet)",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "wallets": "tsx scripts/gen-wallets.ts",
+    "faucet": "tsx scripts/faucet.ts",
+    "doctor": "tsx scripts/doctor.ts",
+    "survey": "tsx scripts/survey.ts",
+    "place-one": "tsx scripts/place-one.ts",
+    "gate": "tsx scripts/phase0-gate.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@somnia-chain/markets-sdk": "^0.28.1",
+    "dotenv": "^17.2.3",
+    "viem": "^2.40.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}
