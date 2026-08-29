@@ -28,8 +28,12 @@ out/
 *.sqlite3
 data/
 
-# ── Phase 0 recon artifacts (regenerable; may contain addresses) ─────────────
-artifacts/
+# ── Phase 0 recon artifacts ──────────────────────────────────────────────────
+# Scratch output is ignored, but the probe record is committed on purpose: it is
+# the Phase 0 exit-gate evidence (tx hashes, market id, outcome) and contains
+# only public chain data. `pnpm gate` reads it.
+artifacts/*
+!artifacts/phase0-probe.json
 
 # ── Editors / OS ─────────────────────────────────────────────────────────────
 .DS_Store

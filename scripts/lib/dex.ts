@@ -9,7 +9,7 @@
 import { SomniaMarkets, quoteBinaryStakeOverBook } from "@somnia-chain/markets-sdk";
 import type { BinaryMarket, MarketOnchain, BinaryStakeQuote, BinaryBuySide } from "@somnia-chain/markets-sdk";
 import { createPublicClient, http, erc20Abi, type PublicClient } from "viem";
-import { loadConfig, type AppConfig, MAINNET_CHAIN_ID, MAINNET_COLLATERAL } from "./config.js";
+import { loadConfig, type AppConfig, MAINNET_CHAIN_ID, MAINNET_COLLATERAL, ConfigError } from "./config.js";
 
 /** Machine codes the UI will switch on. Mirrors CLAUDE.md's error pattern. */
 export type DexErrorCode =
@@ -77,6 +77,28 @@ export function createDex(privateKey?: `0x${string}`): Dex {
       }
     },
   };
+}
+
+/**
+ * Build the client, or fail with an actionable message instead of a stack trace.
+ *
+ * `createDex()` throws on a bad or mainnet-pointing config. Every entry point
+ * was calling it outside its try block, so a `ConfigError` escaped as an
+ * unhandled rejection and printed raw Node output — the "generic failure" that
+ * CLAUDE.md's error pattern exists to prevent.
+ */
+export function createDexOrExit(privateKey?: `0x${string}`): Dex {
+  try {
+    return createDex(privateKey);
+  } catch (e) {
+    const known = e instanceof ConfigError || e instanceof DexError;
+    const code = known ? (e as ConfigError | DexError).code : "UNKNOWN";
+    const action = e instanceof DexError ? e.action : undefined;
+    console.error(`\n\u001b[31m\u2718 Cannot start: ${code}\u001b[0m`);
+    console.error(`  ${e instanceof Error ? e.message : String(e)}`);
+    console.error(`  \u001b[33m\u2192\u001b[0m ${action ?? "Fix .env (see .env.example) and re-run."}\n`);
+    process.exit(1);
+  }
 }
 
 /**

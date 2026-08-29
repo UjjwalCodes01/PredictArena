@@ -93,12 +93,16 @@ export async function check(
   try {
     return { name, ...(await fn()) };
   } catch (e) {
+    // A DexError/ConfigError already knows what the operator should do; the
+    // generic line is only for the genuinely unexpected.
+    const action = (e as { action?: string })?.action;
+    const code = (e as { code?: string })?.code;
     return {
       name,
       status: "fail",
       detail: describeError(e),
-      code: (e as { code?: string })?.code ?? "UNEXPECTED",
-      action: "Unexpected error — see the detail above.",
+      code: code ?? "UNEXPECTED",
+      action: action ?? (code ? "See the detail above; fix .env and re-run." : "Unexpected error — see the detail above."),
     };
   }
 }

@@ -14,9 +14,13 @@ at a web faucet.
 |---|---|---|
 | 1 | `docs/dex-notes.md` complete | ✅ verified against the live chain, indexer and SDK |
 | 2 | One settled Event Contract tx hash | ✅ two placed; one WON and redeemed for +1.7510 tUSDC |
-| 3 | Four funded wallets | ✅ DEV funded (50 STT / ~10k tUSDC). SEED1-3 generated, funded at Phase 5 |
+| 3 | Four funded wallets | ✅ all four funded — DEV 43.97 STT / 19999.92 tUSDC, SEED1-3 2 STT / 10000 tUSDC each |
 
-`pnpm gate` reports **Phase 0 complete**. Measurements and tx hashes are in
+`pnpm gate` reports **Phase 0 complete** — 6 passed, 0 warnings, 0 failures.
+
+One PLAN.md Phase 0 task is **not** done and needs your account, not mine: joining the hackathon
+Telegram and skimming the DoraHacks Q&A tab for rule clarifications.
+[questions-for-telegram.md](questions-for-telegram.md) has the three questions worth asking. Measurements and tx hashes are in
 [dex-notes.md §13](dex-notes.md).
 
 Also done, ahead of the plan: `docs/questions-for-telegram.md` (Q3 and Q6 answered during recon).
@@ -48,6 +52,8 @@ pnpm gate             # verifies all three gate conditions against reality
 
 To rehearse without signing anything: `pnpm place-one --dry-run`.
 
+Health checks at any time — all read-only: `pnpm doctor`, `pnpm survey`, `pnpm gate`, `pnpm test`.
+
 ---
 
 ## What each script does
@@ -55,8 +61,10 @@ To rehearse without signing anything: `pnpm place-one --dry-run`.
 | Command | Purpose |
 |---|---|
 | `pnpm wallets` | Generates DEV + SEED1..3. Refuses to run unless `.gitignore` excludes `.env`; refuses to overwrite existing (possibly funded) keys without `--force`; never prints a key to stdout. |
-| `pnpm faucet` | Mints tUSDC via the collateral contract's own `faucet(uint256)`. `--slot DEV`, `--amount 10000`. |
+| `pnpm faucet` | Mints tUSDC via the collateral contract's own `faucet(uint256)`. `--slot DEV`, `--amount 10000`, `--fund-seeds` (sends STT from DEV to SEED1-3, sidestepping the external faucet's 24h cooldown). |
 | `pnpm doctor` | Safety rail, chain identity, collateral identity, contract bytecode, indexer reachability + lag, venue discovery, live series map, window selection, book params, liquidity, wallet balances, unclaimed winnings. Reports everything wrong in one pass. |
+| `pnpm survey` | Every live window with on-chain status and both sides of the book. Run this before recording a demo — liquidity gaps at every window roll. |
+| `pnpm test` | Money-math unit tests (vitest). |
 | `pnpm place-one` | Places ONE real order and follows it to settlement and redemption. `--dry-run`, `--claim-only`, `--side up\|down`, `--asset BTC\|ETH`, `--interval 300`, `--yes`. Writes `artifacts/phase0-probe.json`. |
 | `pnpm gate` | Checks the three exit-gate conditions. Exit code 0 only when Phase 0 is genuinely done. |
 

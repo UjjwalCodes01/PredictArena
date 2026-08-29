@@ -11,7 +11,7 @@
  */
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve, join } from "node:path";
-import { erc20Abi, formatUnits } from "viem";
+import { erc20Abi } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import {
   loadConfig, getPrivateKey, ENV_PATH, REPO_ROOT, LINKS, explorerAddr, ConfigError,
@@ -20,7 +20,7 @@ import {
   createDex, assertLiveTestnet, findTradableWindows, headroomSecFor, STATUS_TRADING, DexError, type Dex,
 } from "./lib/dex.js";
 import { formatFixed, formatStt, priceToPercent } from "./lib/money.js";
-import { bold, dim, green, yellow, red, blue, heading, report, kv, info, check, summarise, describeError, type CheckResult } from "./lib/log.js";
+import { bold, dim, green, yellow, red, heading, report, kv, info, check, summarise, describeError, type CheckResult } from "./lib/log.js";
 
 const results: CheckResult[] = [];
 const push = (r: CheckResult): CheckResult => (results.push(r), report(r), r);

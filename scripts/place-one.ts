@@ -19,16 +19,16 @@
  *     be inspected, or a failed order is recorded as pending forever.
  *   - Winnings are claimed, not received: settlement alone moves no funds.
  */
-import { writeFileSync, mkdirSync, existsSync, readFileSync } from "node:fs";
+import { writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { privateKeyToAccount } from "viem/accounts";
 import { erc20Abi, keccak256, encodePacked } from "viem";
 import type { BinaryMarket, MarketOnchain } from "@somnia-chain/markets-sdk";
 import { ORDER_TYPE } from "@somnia-chain/markets-sdk";
-import { getPrivateKey, REPO_ROOT, LINKS, explorerTx, explorerAddr } from "./lib/config.js";
+import { getPrivateKey, REPO_ROOT, LINKS, explorerTx } from "./lib/config.js";
 import {
-  createDex, assertLiveTestnet, findTradableWindows, awaitSettlement, headroomSecFor,
+  createDexOrExit, assertLiveTestnet, findTradableWindows, awaitSettlement, headroomSecFor,
   quoteStakeOnChain, STATUS_TRADING, DexError, sleep, type Dex,
 } from "./lib/dex.js";
 import { formatFixed, formatStt, priceToPercent } from "./lib/money.js";
@@ -197,14 +197,23 @@ async function main(): Promise<void> {
   console.log(bold("\nPrediction Leagues — Phase 0 probe order"));
   console.log(dim(DRY_RUN ? "DRY RUN — nothing will be signed.\n" : "This signs and sends REAL testnet transactions.\n"));
 
-  const key = getPrivateKey("DEV");
+  let key: `0x${string}` | undefined;
+  try {
+    key = getPrivateKey("DEV");
+  } catch (e) {
+    // A malformed key must not surface as a Node stack trace.
+    console.error(red(`\n✘ Cannot start: BAD_PRIVATE_KEY`));
+    console.error(`  ${describeError(e)}`);
+    console.error(`  ${yellow("→")} Re-run \`pnpm wallets --force\`, or fix DEV_PRIVATE_KEY in .env by hand.\n`);
+    process.exit(1);
+  }
   if (!key) {
     console.error(red("✘ DEV_PRIVATE_KEY is empty."));
     console.error(`  ${yellow("→")} Run ${bold("pnpm wallets")}, fund the DEV address, then retry.`);
     process.exit(1);
   }
   const account = privateKeyToAccount(key);
-  const dex = createDex(key);
+  const dex = createDexOrExit(key);
   const d = dex.cfg.collateral.decimals;
   const notes: string[] = [];
 
@@ -259,6 +268,13 @@ async function main(): Promise<void> {
     const asset = (val("--asset") ?? dex.cfg.targetAsset).toUpperCase();
     const intervalArg = val("--interval");
     const intervalSec = intervalArg ? Number(intervalArg) : dex.cfg.targetIntervalSec;
+    if (!Number.isInteger(intervalSec) || intervalSec <= 0) {
+      throw new DexError("UNKNOWN", `--interval must be a positive whole number of seconds, got "${intervalArg}".`,
+        "Live series are typically 60, 300, 900, 3600, 14400 or 86400 — run `pnpm survey` to see what is open.");
+    }
+    if (asset !== "BTC" && asset !== "ETH") {
+      throw new DexError("NO_MARKETS", `Unknown asset "${asset}".`, "Only BTC and ETH have Event Contract windows.");
+    }
 
     heading(`2. Selecting a ${asset} window`);
     let candidates = await findTradableWindows(dex, { asset, intervalSec });
@@ -386,7 +402,18 @@ async function main(): Promise<void> {
     const interval = Number(market.intervalSec ?? intervalSec);
     // Order expiry is mandatory and capped at the market's own expiry. Sit just
     // inside it so a crashed run leaves nothing resting on the book.
-    const expireSec = Math.min(Number(market.expiry) - 1, Math.floor(Date.now() / 1000) + Math.max(30, headroomSecFor(interval)));
+    const nowSec = Math.floor(Date.now() / 1000);
+    const expireSec = Math.min(Number(market.expiry) - 1, nowSec + Math.max(30, headroomSecFor(interval)));
+    // Quoting and confirming take real time; the window can reach its expiry in
+    // between. An order whose expiry is already past is dead on arrival, so stop
+    // here rather than burn gas discovering that on-chain.
+    if (expireSec <= nowSec + 2) {
+      throw new DexError(
+        "WINDOW_CLOSED",
+        `Window expires in ${Number(market.expiry) - nowSec}s — too close to place an order that would live.`,
+        "Re-run; the next window is picked up automatically.",
+      );
+    }
     const userData = idempotencyKey(account.address, market.marketId);
 
     console.log(dim(`  FILL_OR_KILL taker order, expires in ${expireSec - Math.floor(Date.now() / 1000)}s, userData=${userData}`));

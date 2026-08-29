@@ -9,13 +9,20 @@
  * Flags:
  *   --slot DEV|SEED1|SEED2|SEED3   just one wallet (default: all configured)
  *   --amount <whole tUSDC>         default 10000, the contract's own default
+ *   --fund-seeds                   send STT from DEV to SEED1..3 first
+ *
+ * `--fund-seeds` exists because the external STT faucet is rate-limited to one
+ * claim per 24h, which would otherwise make "four funded wallets" a three-day
+ * job. DEV already holds far more STT than the whole build needs, so it seeds
+ * the others directly.
  */
 import { privateKeyToAccount } from "viem/accounts";
 import { erc20Abi } from "viem";
+import { createWalletClient, http } from "viem";
 import { getPrivateKey, WALLET_SLOTS, LINKS, explorerTx, type WalletSlot } from "./lib/config.js";
-import { createDex, assertLiveTestnet } from "./lib/dex.js";
+import { createDexOrExit, assertLiveTestnet } from "./lib/dex.js";
 import { formatFixed, formatStt } from "./lib/money.js";
-import { bold, dim, green, yellow, red, heading, kv, info, describeError } from "./lib/log.js";
+import { bold, dim, green, yellow, red, heading, kv, describeError } from "./lib/log.js";
 
 const ARGS = process.argv.slice(2);
 const val = (f: string): string | undefined => {
@@ -29,22 +36,80 @@ if (slotArg && !WALLET_SLOTS.includes(slotArg as WalletSlot)) {
   process.exit(2);
 }
 const amountArg = val("--amount");
-const AMOUNT_WHOLE = amountArg ? BigInt(amountArg) : 10_000n;
+if (amountArg !== undefined && !/^\d+$/.test(amountArg.trim())) {
+  console.error(red(`--amount must be a whole number of tUSDC, got "${amountArg}".`));
+  process.exit(2);
+}
+const AMOUNT_WHOLE = amountArg ? BigInt(amountArg.trim()) : 10_000n;
 
 /** ~0.6 STT: the SDK's fixed 10M gas ceiling at 60 gwei must be funded up front. */
 const GAS_FLOOR = 600_000_000_000_000_000n;
+/** Enough for a gas ceiling plus a comfortable margin of real transactions. */
+const SEED_GRANT = 2_000_000_000_000_000_000n;
+const FUND_SEEDS = ARGS.includes("--fund-seeds");
+
+/**
+ * Tops up SEED1..3 from DEV so every wallet can transact. Sends are serialised:
+ * they all originate from the DEV key, and two senders on one key race each
+ * other's nonce.
+ */
+async function fundSeedsFromDev(dex: ReturnType<typeof createDexOrExit>): Promise<void> {
+  const devKey = getPrivateKey("DEV");
+  if (!devKey) {
+    console.log(`  ${red("✘")} DEV_PRIVATE_KEY is empty — nothing to fund from.`);
+    return;
+  }
+  const dev = privateKeyToAccount(devKey);
+  const devBalance = await dex.rpc.getBalance({ address: dev.address });
+
+  type SeedSlot = "SEED1" | "SEED2" | "SEED3";
+  const targets: Array<{ slot: SeedSlot; key: `0x${string}` }> = [];
+  for (const slot of ["SEED1", "SEED2", "SEED3"] as const) {
+    const key = getPrivateKey(slot);
+    if (key) targets.push({ slot, key });
+  }
+
+  const needed = SEED_GRANT * BigInt(targets.length) + GAS_FLOOR;
+  if (devBalance < needed) {
+    console.log(`  ${yellow("!")} DEV holds ${formatStt(devBalance)} STT; needs ~${formatStt(needed)} to seed ${targets.length} wallet(s).`);
+    return;
+  }
+
+  const wallet = createWalletClient({ account: dev, chain: dex.cfg.chain, transport: http(dex.cfg.rpcHttpUrl) });
+
+  for (const { slot, key } of targets) {
+    const to = privateKeyToAccount(key).address;
+    const have = await dex.rpc.getBalance({ address: to });
+    if (have >= GAS_FLOOR) {
+      console.log(`  ${dim(`${slot} already holds ${formatStt(have)} STT — skipping`)}`);
+      continue;
+    }
+    const hash = await wallet.sendTransaction({ to, value: SEED_GRANT });
+    const receipt = await dex.rpc.waitForTransactionReceipt({ hash });
+    if (receipt.status === "reverted") {
+      console.log(`  ${red("✘")} ${slot} transfer reverted ${explorerTx(hash)}`);
+      continue;
+    }
+    console.log(`  ${green("✔")} ${slot} +${formatStt(SEED_GRANT)} STT  ${explorerTx(hash)}`);
+  }
+}
 
 async function main(): Promise<void> {
   console.log(bold("\nPrediction Leagues — tUSDC faucet"));
   console.log(dim("Mints testnet collateral. STT for gas must already be present.\n"));
 
-  const dex = createDex();
+  const dex = createDexOrExit();
   const d = dex.cfg.collateral.decimals;
   const collateral = dex.cfg.collateral.address;
 
   try {
     await assertLiveTestnet(dex);
     if (!collateral) throw new Error("SDK exposed no collateral address.");
+
+    if (FUND_SEEDS) {
+      heading("Seeding STT from DEV");
+      await fundSeedsFromDev(dex);
+    }
 
     const slots = slotArg ? [slotArg as WalletSlot] : [...WALLET_SLOTS];
     const amount = AMOUNT_WHOLE * 10n ** BigInt(d);

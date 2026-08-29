@@ -8,13 +8,13 @@
  * Liquidity on testnet is intermittent and per-window, so this is the tool that
  * tells you whether `pnpm place-one` will find a fill before you run it.
  */
-import { createDex, STATUS_TRADING } from "./lib/dex.js";
+import { createDexOrExit, STATUS_TRADING } from "./lib/dex.js";
 import { formatFixed } from "./lib/money.js";
 import { bold, dim, green, yellow, red, heading, describeError } from "./lib/log.js";
 
 async function main(): Promise<void> {
   console.log(bold("\nLive Up/Down windows — liquidity survey"));
-  const dex = createDex();
+  const dex = createDexOrExit();
   const d = dex.cfg.collateral.decimals;
 
   try {

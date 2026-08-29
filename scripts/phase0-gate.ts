@@ -16,7 +16,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { REPO_ROOT, WALLET_SLOTS, getPrivateKey, LINKS, explorerTx, type WalletSlot } from "./lib/config.js";
 import { createDex, assertLiveTestnet } from "./lib/dex.js";
 import { formatFixed, formatStt } from "./lib/money.js";
-import { bold, dim, green, yellow, red, heading, report, kv, info, check, summarise, type CheckResult } from "./lib/log.js";
+import { bold, dim, green, red, heading, report, kv, check, summarise, type CheckResult } from "./lib/log.js";
 
 const results: CheckResult[] = [];
 const push = (r: CheckResult): CheckResult => (results.push(r), report(r), r);
@@ -99,9 +99,11 @@ async function main(): Promise<void> {
 
   const collateral = dex.cfg.collateral.address;
   const d = dex.cfg.collateral.decimals;
-  // DEV must be able to trade; the seed wallets only matter from Phase 5, so a
-  // missing seed is a warning rather than a gate failure.
-  const REQUIRED: WalletSlot[] = ["DEV"];
+  // PLAN.md's gate says "four funded wallets", so all four are required. An
+  // earlier draft softened SEED1..3 to warnings; that was moving the goalpost
+  // rather than meeting it. `pnpm faucet --fund-seeds` tops them up from DEV,
+  // which sidesteps the external faucet's 24h cooldown.
+  const REQUIRED: WalletSlot[] = [...WALLET_SLOTS];
 
   for (const slot of WALLET_SLOTS) {
     const required = REQUIRED.includes(slot);
@@ -140,7 +142,7 @@ async function main(): Promise<void> {
     console.log(`  ${green(bold("Phase 0 complete."))} Proceed to Phase 1 (repo scaffold + packages/dex).\n`);
   } else {
     console.log(`  ${red("Phase 0 is not done yet.")} Clear the blocking items above.`);
-    console.log(`  ${dim("Warnings on SEED1..3 are fine until Phase 5 (demo seeding).")}\n`);
+    console.log(`  ${dim("Unfunded seed wallets? Run `pnpm faucet --fund-seeds`.")}\n`);
   }
   process.exit(code);
 }

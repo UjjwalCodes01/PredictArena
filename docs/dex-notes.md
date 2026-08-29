@@ -68,8 +68,11 @@ present in the deployed bytecode), surfaced by the SDK as `trader.faucet({ amoun
 to 10,000 tUSDC. Any wallet holding STT for gas can mint its own stake.
 
 This matters for the demo: PLAN.md's risk register lists "testnet faucet dry / STT scarce" as a
-medium risk needing 4 hand-funded wallets. **Half of that risk is gone** — only STT is externally
-gated. `pnpm faucet` funds the seed wallets' collateral in one command.
+medium risk needing 4 hand-funded wallets. **That risk is effectively gone.** tUSDC is unlimited and
+self-minted; STT is externally gated but only once — the Telegram faucet grants 50 STT per 24h, and
+`pnpm faucet --fund-seeds` distributes it from DEV to the seed wallets. All four wallets were funded
+from a single faucet claim. Measured cost: ~0.0016 STT per transaction, so 50 STT is thousands of
+orders.
 
 > Note the SDK's `TraderConfig.decimals` **defaults to 6**, which happens to be correct for testnet —
 > but set it explicitly rather than relying on the default.
@@ -321,13 +324,19 @@ Event Contracts.
 | Command | What it does |
 |---|---|
 | `pnpm wallets` | Generates 4 burner wallets into `.env` (mode 600). Refuses to overwrite funded ones without `--force`; refuses to run at all unless `.gitignore` excludes `.env`. |
-| `pnpm faucet` | Mints tUSDC to the burners via the collateral contract's own `faucet(uint256)`. Needs STT already present. `--slot`, `--amount`. |
+| `pnpm faucet` | Mints tUSDC to the burners via the collateral contract's own `faucet(uint256)`. Needs STT already present. `--slot`, `--amount`, `--fund-seeds`. |
 | `pnpm doctor` | Read-only. 20 checks: safety rail, chain, collateral identity, contract bytecode, indexer reachability + lag, venue discovery, live series map, window selection, book params, liquidity, wallet balances, unclaimed winnings. Signs nothing. |
+| `pnpm survey` | Read-only. Every live window with its on-chain status and both sides of the book — answers "will a call fill right now?". |
+| `pnpm test` | Vitest. Table-driven money-math tests, most values taken from the measured probe in §13. |
 | `pnpm place-one` | The exit gate. Places ONE real order, verifies the receipt, polls to settlement, redeems, writes `artifacts/phase0-probe.json`. Supports `--dry-run`, `--claim-only`, `--side up\|down`, `--asset`, `--interval`, `--yes`. |
 | `pnpm gate` | Verifies all three Phase 0 exit-gate conditions against reality. |
 
 Shared code lives in `scripts/lib/` (`config.ts`, `dex.ts`, `money.ts`, `log.ts`) and is written to
 be **promoted into `packages/dex` in Phase 1** rather than thrown away.
+
+Safety rails are tested, not assumed. All of these are verified to fail closed: mainnet chain id,
+mainnet RPC host, mainnet indexer host, Elwood (50313) mistaken for Shannon, a malformed private
+key, and a private key committed anywhere outside `.env`.
 
 ---
 
