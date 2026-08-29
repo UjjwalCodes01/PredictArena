@@ -9,7 +9,7 @@
  *  2. **Never trust the local clock.** Countdowns and cutoffs use the
  *     chain-corrected `ServerClock`.
  */
-import type { BinaryMarket, MarketOnchain } from "@somnia-chain/markets-sdk";
+import type { BinaryMarket } from "@somnia-chain/markets-sdk";
 import type { DexClient } from "./client.js";
 import { asDexError } from "./errors.js";
 
@@ -43,7 +43,7 @@ export interface Window {
   readonly secondsLeft: number;
   readonly status: number;
   readonly isTradable: boolean;
-  readonly onchain: MarketOnchain;
+  readonly onchain: import("@somnia-chain/markets-sdk").MarketOnchain;
   readonly raw: BinaryMarket;
 }
 
@@ -92,15 +92,26 @@ export async function getWindows(client: DexClient, opts: GetWindowsOptions = {}
     throw asDexError(e, "API_DOWN");
   }
 
+  // Read on-chain status for every row CONCURRENTLY. Doing this in a sequential
+  // loop cost ~1.5s per window -- 10s for seven -- which is far too slow for a
+  // page load, let alone an indexer cycle. The request queue still bounds how
+  // many are actually in flight.
+  const settled = await Promise.all(
+    rows.map(async (raw) => {
+      try {
+        const onchain = await client.queue.run(() => client.exchange.client.getMarketOnchain(raw.marketId));
+        return { raw, onchain };
+      } catch {
+        // A window we cannot read on-chain is a window we must not trade.
+        return null;
+      }
+    }),
+  );
+
   const windows: Window[] = [];
-  for (const raw of rows) {
-    let onchain: MarketOnchain;
-    try {
-      onchain = await client.queue.run(() => client.exchange.client.getMarketOnchain(raw.marketId));
-    } catch {
-      // A window we cannot read on-chain is a window we must not trade.
-      continue;
-    }
+  for (const entry of settled) {
+    if (!entry) continue;
+    const { raw, onchain } = entry;
 
     const closesAtSec = Number(raw.expiry);
     const secondsLeft = client.clock.secondsUntil(closesAtSec);

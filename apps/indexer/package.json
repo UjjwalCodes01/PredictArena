@@ -1,0 +1,21 @@
+{
+  "name": "@predictarena/indexer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Keeps the DB projection in step with chain truth. Polling is the guarantee.",
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@predictarena/db": "workspace:*",
+    "@predictarena/dex": "workspace:*",
+    "pino": "^10.0.0",
+    "dotenv": "^17.2.3"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

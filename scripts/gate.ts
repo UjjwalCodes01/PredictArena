@@ -211,11 +211,71 @@ async function main(): Promise<void> {
           action: "Route it through packages/dex." };
   }));
 
+  // ── Phase 2 ───────────────────────────────────────────────────────────────
+  heading("5. Phase 2 — data layer, scoring and indexer");
+
+  push(await check("packages/db exports the Phase 2 surface", async () => {
+    const mod = await import("@predictarena/db");
+    const record = mod as unknown as Record<string, unknown>;
+    const required = [
+      "createDb", "computeStandings", "isoWeekId", "weekIdForClose",
+      "upsertWindow", "upsertCall", "settleCallsForWindow", "getStandings", "getOverdueCalls",
+    ];
+    const missing = required.filter((n) => typeof record[n] !== "function");
+    return missing.length === 0
+      ? { status: "pass", code: "OK", detail: `${required.length} entry points imported and callable.` }
+      : { status: "fail", code: "DB_INCOMPLETE", detail: `Not callable: ${missing.join(", ")}.`,
+          action: "Finish packages/db." };
+  }));
+
+  push(await check("Scoring is a pure function with no I/O", async () => {
+    const src = readFileSync(resolve(REPO_ROOT, "packages", "db", "src", "scoring.ts"), "utf8");
+    // A clock, a random source or a query inside scoring would make standings
+    // irreproducible -- the one property the whole design rests on.
+    const impurities = [
+      ["Date.now", /Date\.now\(/],
+      ["new Date", /new Date\(/],
+      ["Math.random", /Math\.random\(/],
+      ["a db import", /from "\.\/(client|queries)\.js"/],
+    ] as const;
+    const found = impurities.filter(([, re]) => re.test(src)).map(([name]) => name);
+    return found.length === 0
+      ? { status: "pass", code: "OK", detail: "No clock, randomness or I/O in the scoring engine." }
+      : { status: "fail", code: "IMPURE_SCORING", detail: `Found: ${found.join(", ")}.`,
+          action: "Standings must be reproducible from raw calls alone." };
+  }));
+
+  push(await check("Database is migrated and money columns are exact", async () => {
+    const url = process.env["DATABASE_URL"]?.trim();
+    if (!url) {
+      return { status: "warn", code: "NO_DATABASE_URL", detail: "DATABASE_URL is not set.",
+        action: "Set it in .env, then run `pnpm db:migrate`." };
+    }
+    const { createSql } = await import("@predictarena/db");
+    const sql = createSql(url);
+    const tables = await sql`SELECT table_name FROM information_schema.tables WHERE table_schema='public'`;
+    const names = new Set(tables.map((r: Record<string, unknown>) => String(r["table_name"])));
+    const missing = ["windows", "calls", "wallets", "sync_state"].filter((t) => !names.has(t));
+    if (missing.length > 0) {
+      return { status: "fail", code: "NOT_MIGRATED", detail: `Missing tables: ${missing.join(", ")}.`,
+        action: "Run `pnpm db:migrate`." };
+    }
+    const cols = await sql`
+      SELECT data_type FROM information_schema.columns
+      WHERE table_name='calls' AND column_name IN ('stake','quantity','payout')`;
+    const floats = cols.filter((r: Record<string, unknown>) => !String(r["data_type"]).includes("numeric"));
+    return floats.length === 0
+      ? { status: "pass", code: "OK", detail: "4 tables present; money columns are numeric, never float." }
+      : { status: "fail", code: "FLOAT_MONEY", detail: "A money column is not numeric.",
+          action: "Money must never be stored as a float (CLAUDE.md rule 3)." };
+  }));
+
   const code = summarise(results, "Exit gates — summary");
 
   heading("Verdict");
   if (code === 0) {
-    console.log(`  ${green(bold("Phases 0 and 1 complete."))} Proceed to Phase 2 (data layer + indexer).\n`);
+    console.log(`  ${green(bold("Phases 0, 1 and 2 complete."))} Proceed to Phase 3 (web app).`);
+    console.log(`  ${dim("The Phase 2 recovery property is proved separately by `pnpm gate:phase2`.")}\n`);
   } else {
     console.log(`  ${red("Phase 0 is not done yet.")} Clear the blocking items above.`);
     console.log(`  ${dim("Unfunded seed wallets? Run `pnpm faucet --fund-seeds`.")}\n`);

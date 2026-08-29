@@ -1,0 +1,29 @@
+{
+  "name": "@predictarena/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Schema, queries and the pure scoring engine. The DB is a projection of chain truth, never a source of it.",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "generate": "drizzle-kit generate",
+    "migrate": "tsx src/migrate.ts",
+    "studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.0.2",
+    "drizzle-orm": "^0.44.7",
+    "dotenv": "^17.2.3"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.31.6",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11"
+  }
+}

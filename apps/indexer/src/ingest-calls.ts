@@ -1,0 +1,188 @@
+/**
+ * Call ingestion -- derived from chain fills, never from anything a client says.
+ *
+ * AGENTS.md section 5 is explicit: position writes come only from the indexer's
+ * own chain reads, keyed by the wallet recovered from the chain. So a "call" is
+ * discovered here by reading the venue's fills, not by a browser posting "I
+ * placed a bet". Nothing a user sends could fabricate a position.
+ *
+ * Two modelling decisions worth stating:
+ *
+ *  1. **One user action is one call.** An order can sweep several price levels
+ *     and produce several fills sharing a transaction. Those are aggregated
+ *     into a single call, because the player tapped once.
+ *
+ *  2. **Takers only.** A resting maker also holds a position, but on this venue
+ *     makers are market-making bots, and our own app only ever places taker
+ *     orders. Counting makers would put bots on the league table.
+ */
+import type { DexClient } from "@predictarena/dex";
+import { upsertCall, touchWallet, weekIdForClose, type Database, type NewCallRow } from "@predictarena/db";
+import type { CallStatus, Direction } from "@predictarena/db";
+import { log } from "./log.js";
+
+/** Page size per fills request. Pagination continues until a short page. */
+const FILLS_PAGE = 200;
+/** Hard stop, so a pathological window cannot spin the loop forever. */
+const FILLS_MAX_PAGES = 25;
+
+/**
+ * All fills for a pool, following pagination.
+ *
+ * AGENTS.md section 5: "always follow pagination; never assume one page." Live
+ * windows currently carry a handful of fills, so a single page would work
+ * today -- but a busy demo window is exactly when silently dropping the tail
+ * would cost us calls, and a dropped call is a missing league entry.
+ */
+async function fetchAllFills(dex: DexClient, pool: `0x${string}`) {
+  const all: Awaited<ReturnType<DexClient["exchange"]["client"]["getFills"]>> = [];
+  for (let page = 0; page < FILLS_MAX_PAGES; page += 1) {
+    const batch = await dex.queue.run(() =>
+      dex.exchange.client.getFills(pool, { limit: FILLS_PAGE, offset: page * FILLS_PAGE }),
+    );
+    all.push(...batch);
+    // A short page means we reached the end.
+    if (batch.length < FILLS_PAGE) return all;
+  }
+  log.warn({ pool, pages: FILLS_MAX_PAGES }, "fills pagination hit its page cap; tail may be missing");
+  return all;
+}
+
+/** Only a BUY opens a position; a SELL is closing one, not making a call. */
+function directionOf(side: string | null): Direction | null {
+  if (side === "BUY_YES") return "UP";
+  if (side === "BUY_NO") return "DOWN";
+  return null;
+}
+
+/** What call ingestion needs about a window, read once by the caller. */
+export interface IngestTarget {
+  marketId: string;
+  pool: `0x${string}`;
+  asset: string;
+  closesAtSec: number;
+  resolved: boolean;
+  voided: boolean;
+  winningOutcome: number;
+}
+
+interface Aggregated {
+  txHash: string;
+  wallet: string;
+  direction: Direction;
+  quantity: bigint;
+  stake: bigint;
+  placedAtSec: number;
+}
+
+export interface IngestCallsResult {
+  windowsScanned: number;
+  fillsSeen: number;
+  callsWritten: number;
+  errors: number;
+}
+
+/**
+ * Read fills for the given windows and record the calls they represent.
+ *
+ * Idempotent: re-reading the same fills upserts the same rows, which is what
+ * lets this run every cycle and after every restart without care.
+ */
+export async function ingestCalls(
+  dex: DexClient,
+  db: Database,
+  windows: ReadonlyArray<IngestTarget>,
+): Promise<IngestCallsResult> {
+  const result: IngestCallsResult = { windowsScanned: 0, fillsSeen: 0, callsWritten: 0, errors: 0 };
+
+  // Fills read concurrently: sequentially this was ~1.6s per window, which does
+  // not fit a 20s cycle once there are a dozen live windows.
+  const reads = await Promise.all(
+    windows.map(async (w) => {
+      try {
+        return { w, fills: await fetchAllFills(dex, w.pool) };
+      } catch (e) {
+        log.warn({ marketId: w.marketId, err: e instanceof Error ? e.message : String(e) }, "fills read failed");
+        return { w, fills: null };
+      }
+    }),
+  );
+
+  for (const { w, fills } of reads) {
+    result.windowsScanned += 1;
+    if (!fills) { result.errors += 1; continue; }
+    result.fillsSeen += fills.length;
+    if (fills.length === 0) continue;
+
+    // Aggregate fills into one call per (transaction, direction).
+    const byCall = new Map<string, Aggregated>();
+    for (const f of fills) {
+      const taker = f.taker ?? f.takerOrder?.owner ?? null;
+      const direction = directionOf(f.takerSide ?? f.takerOrder?.side ?? null);
+      if (!taker || !direction || !f.txHash) continue;
+
+      const key = `${f.txHash}:${direction}`;
+      const placedAtSec = Number(f.timestamp);
+      const existing = byCall.get(key);
+      if (existing) {
+        existing.quantity += BigInt(f.quantity);
+        existing.stake += BigInt(f.quoteQuantity);
+        existing.placedAtSec = Math.min(existing.placedAtSec, placedAtSec);
+      } else {
+        byCall.set(key, {
+          txHash: f.txHash,
+          wallet: taker.toLowerCase(),
+          direction,
+          quantity: BigInt(f.quantity),
+          stake: BigInt(f.quoteQuantity),
+          placedAtSec,
+        });
+      }
+    }
+    if (byCall.size === 0) continue;
+
+    // The caller already read this window's on-chain state, so use it rather
+    // than paying for the same read again. Where it is still unsettled the row
+    // stays PENDING and the reconciler owns it -- never guess an outcome.
+    let settledStatus: ((d: Direction) => CallStatus) | null = null;
+    let settledAt: Date | null = null;
+    if (w.voided) {
+      settledStatus = () => "VOID";
+      settledAt = new Date();
+    } else if (w.resolved) {
+      const winner: Direction = w.winningOutcome === 0 ? "UP" : "DOWN";
+      settledStatus = (d) => (d === winner ? "WON" : "LOST");
+      settledAt = new Date();
+    }
+
+    for (const c of byCall.values()) {
+      const row: NewCallRow = {
+        id: `${c.txHash}:${c.direction}`,
+        wallet: c.wallet,
+        windowId: w.marketId,
+        asset: w.asset,
+        direction: c.direction,
+        stake: c.stake.toString(),
+        quantity: c.quantity.toString(),
+        txHash: c.txHash,
+        status: settledStatus ? settledStatus(c.direction) : "PENDING",
+        placedAt: new Date(c.placedAtSec * 1000),
+        settledAt,
+        weekId: weekIdForClose(w.closesAtSec),
+      };
+      try {
+        await touchWallet(db, c.wallet);
+        await upsertCall(db, row);
+        result.callsWritten += 1;
+      } catch (e) {
+        result.errors += 1;
+        log.warn(
+          { txHash: c.txHash, wallet: c.wallet, err: e instanceof Error ? e.message : String(e) },
+          "call upsert failed",
+        );
+      }
+    }
+  }
+
+  return result;
+}

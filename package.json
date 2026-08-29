@@ -16,6 +16,11 @@
     "verify-api": "tsx scripts/verify-api.ts",
     "claim": "tsx scripts/claim.ts",
     "gate": "tsx scripts/gate.ts",
+    "gate:phase2": "tsx scripts/gate-phase2.ts",
+    "db:generate": "pnpm -F @predictarena/db generate",
+    "db:migrate": "pnpm -F @predictarena/db migrate",
+    "db:check": "tsx scripts/db-check.ts",
+    "indexer": "tsx apps/indexer/src/main.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . && tsx scripts/lint-no-float-money.ts && tsx scripts/lint-no-mainnet.ts",
     "test": "vitest run"

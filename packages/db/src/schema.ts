@@ -1,0 +1,140 @@
+/**
+ * Database schema. Neon serverless Postgres via Drizzle.
+ *
+ * The DB is a PROJECTION of chain truth, never a source of it (AGENTS.md
+ * section 3). Every row here is re-derivable from the chain plus the window it
+ * refers to, and on any disagreement the chain wins and the row is corrected.
+ * Nothing is ever "fixed" here by hand.
+ *
+ * Two deviations from PLAN.md's sketch, both deliberate:
+ *
+ *  1. `stake` is `numeric(78,0)`, not a float or an int8. Amounts are bigint end
+ *     to end (CLAUDE.md hard rule 3); numeric comes back from pg as a string, so
+ *     a value can never silently become a float on the way out.
+ *
+ *  2. The uniqueness constraint is on `tx_hash`, NOT on (wallet, window_id).
+ *     PLAN.md suggested the latter, but a wallet is genuinely allowed to place
+ *     several calls on one window on-chain -- a unique key there would reject
+ *     legitimate rows. The one-per-window rule is a SCORING cap, enforced by the
+ *     pure engine, so here it is only an index.
+ */
+import {
+  pgTable, pgEnum, text, integer, bigint, numeric, timestamp, index, uniqueIndex, primaryKey,
+} from "drizzle-orm/pg-core";
+
+/** Position status. VOID is a first-class outcome, not an error. */
+export const callStatus = pgEnum("call_status", ["PENDING", "WON", "LOST", "VOID", "FAILED"]);
+export const direction = pgEnum("direction", ["UP", "DOWN"]);
+/** Window lifecycle, mirroring the on-chain status we actually observe. */
+export const windowStatus = pgEnum("window_status", ["OPEN", "LOCKED", "RESOLVED", "VOIDED"]);
+
+/**
+ * One Up/Down window. `id` is the on-chain marketId -- never the pool address,
+ * because pools are recycled across windows.
+ */
+export const windows = pgTable(
+  "windows",
+  {
+    id: text("id").primaryKey(),
+    asset: text("asset").notNull(),
+    venueId: text("venue_id"),
+    intervalSec: integer("interval_sec"),
+    /** Reference price the outcome is measured against; 0 until the window opens. */
+    strike: numeric("strike", { precision: 78, scale: 0 }),
+    opensAt: timestamp("opens_at", { withTimezone: true }).notNull(),
+    closesAt: timestamp("closes_at", { withTimezone: true }).notNull(),
+    status: windowStatus("status").notNull().default("OPEN"),
+    /** 0 = Up, 1 = Down. Null while unresolved or when voided. */
+    winningOutcome: integer("winning_outcome"),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    /**
+     * ISO week of the CLOSE time, computed once at insert. A call inherits this,
+     * so a window cannot drift between weeks after the fact.
+     */
+    weekId: text("week_id").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("windows_asset_closes_idx").on(t.asset, t.closesAt),
+    index("windows_week_idx").on(t.weekId),
+    index("windows_status_idx").on(t.status),
+  ],
+);
+
+/**
+ * A wallet's call on a window.
+ *
+ * `stake` and `quantity` are base units of the collateral (tUSDC, 6dp) held as
+ * numeric so they round-trip as exact integers.
+ */
+export const calls = pgTable(
+  "calls",
+  {
+    id: text("id").primaryKey(),
+    wallet: text("wallet").notNull(),
+    windowId: text("window_id").notNull().references(() => windows.id),
+    asset: text("asset").notNull(),
+    direction: direction("direction").notNull(),
+    /** Collateral escrowed, base units. */
+    stake: numeric("stake", { precision: 78, scale: 0 }).notNull(),
+    /** Outcome contracts actually filled, base units. */
+    quantity: numeric("quantity", { precision: 78, scale: 0 }).notNull().default("0"),
+    txHash: text("tx_hash").notNull(),
+    /** The on-chain userData we set: deterministic per (wallet, window). */
+    idempotencyKey: numeric("idempotency_key", { precision: 78, scale: 0 }),
+    status: callStatus("status").notNull().default("PENDING"),
+    placedAt: timestamp("placed_at", { withTimezone: true }).notNull(),
+    settledAt: timestamp("settled_at", { withTimezone: true }),
+    /** Collateral received on redemption, base units. Null until claimed. */
+    payout: numeric("payout", { precision: 78, scale: 0 }),
+    redeemTxHash: text("redeem_tx_hash"),
+    /** Inherited from the window's close time. Decided once, never recomputed. */
+    weekId: text("week_id").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Ingest idempotency. Keyed on (tx_hash, direction), NOT tx_hash alone: one
+    // order can sweep several price levels and so produce several fills sharing
+    // a transaction, and a batch could in principle take both sides. Those are
+    // one call per direction, not one row per fill -- a user tapped once.
+    uniqueIndex("calls_tx_direction_uidx").on(t.txHash, t.direction),
+    // NOT unique: several calls on one window are legal on-chain. The
+    // one-per-window rule is a scoring cap, not a storage constraint.
+    index("calls_wallet_window_idx").on(t.wallet, t.windowId),
+    index("calls_week_status_idx").on(t.weekId, t.status),
+    // The reconciler's hot path: everything still non-terminal.
+    index("calls_status_idx").on(t.status),
+    index("calls_wallet_idx").on(t.wallet),
+  ],
+);
+
+/** A participant. The wallet address IS the identity -- no accounts, no passwords. */
+export const wallets = pgTable("wallets", {
+  address: text("address").primaryKey(),
+  firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  /** Optional display name. Never required; the address always works. */
+  displayName: text("display_name"),
+});
+
+/**
+ * Indexer cursors and heartbeats. Keyed by name so a new worker can add its own
+ * without a migration.
+ */
+export const syncState = pgTable(
+  "sync_state",
+  {
+    key: text("key").notNull(),
+    blockNumber: bigint("block_number", { mode: "bigint" }),
+    cursor: text("cursor"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.key] })],
+);
+
+export type WindowRow = typeof windows.$inferSelect;
+export type NewWindowRow = typeof windows.$inferInsert;
+export type CallRow = typeof calls.$inferSelect;
+export type NewCallRow = typeof calls.$inferInsert;
+export type WalletRow = typeof wallets.$inferSelect;
+export type SyncStateRow = typeof syncState.$inferSelect;

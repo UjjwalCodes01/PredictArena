@@ -1,11 +1,23 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "types": ["node"],
+    "types": [
+      "node"
+    ],
     "noEmit": true,
     "paths": {
-      "@predictarena/dex": ["./packages/dex/src/index.ts"]
+      "@predictarena/dex": [
+        "./packages/dex/src/index.ts"
+      ],
+      "@predictarena/db": [
+        "./packages/db/src/index.ts"
+      ]
     }
   },
-  "include": ["scripts/**/*.ts", "packages/*/src/**/*.ts"]
+  "include": [
+    "scripts/**/*.ts",
+    "packages/*/src/**/*.ts",
+    "packages/*/drizzle.config.ts",
+    "apps/*/src/**/*.ts"
+  ]
 }
