@@ -16,7 +16,8 @@ export {
   upsertWindow, upsertCall, markWindowSettled, settleCallsForWindow, getNonTerminalCalls, getOverdueCalls,
   getOpenWindows, touchWallet, getSyncState, setSyncState, getScorableCalls,
   getStandings, getWalletCalls, getWindowsByIds, getRecentCalls, getLeagueTotals,
-  setDisplayName, getWallet, getDisplayNames, DISPLAY_NAME_RE, DisplayNameError,
+  setDisplayName, saveProfile, normalizeProfile, getWallet, getDisplayNames,
+  DISPLAY_NAME_RE, BIO_MAX, DisplayNameError, type ProfileInput,
   normalizeAddress, TERMINAL_STATUSES,
 } from "./queries";
 

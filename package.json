@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "pnpm -F @predictarena/web dev",
     "build": "pnpm -F @predictarena/web build",
+    "check:bundle": "tsx scripts/check-bundle.ts",
     "dev:indexer": "tsx apps/indexer/src/main.ts",
     "wallets": "tsx scripts/gen-wallets.ts",
     "faucet": "tsx scripts/faucet.ts",

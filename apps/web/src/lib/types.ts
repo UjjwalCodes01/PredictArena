@@ -81,7 +81,11 @@ export interface StandingsResponse {
 export interface ProfileDto {
   address: string;
   displayName: string | null;
+  bio: string | null;
+  twitter: string | null;
+  website: string | null;
   firstSeenAt: string | null;
+  profileUpdatedAt?: string | null;
 }
 
 /** Every API failure carries a machine code the UI switches on. */

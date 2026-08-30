@@ -133,7 +133,7 @@ export default function PortfolioPage() {
         </Card>
       ) : null}
 
-      <h2 className="mb-3 text-sm font-medium text-ink">History</h2>
+      <h2 className="label mb-2">HISTORY</h2>
 
       {calls.isPending ? (
         <Card className="divide-y divide-border">

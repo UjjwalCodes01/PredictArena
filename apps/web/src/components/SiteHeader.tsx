@@ -29,7 +29,7 @@ export function SiteHeader() {
   const { isConnected } = useAccount();
 
   const items = isConnected
-    ? [...PRIMARY, { href: "/portfolio", label: "Your calls" } as const]
+    ? [...PRIMARY, { href: "/portfolio", label: "Your calls" } as const, { href: "/settings", label: "Profile" } as const]
     : PRIMARY;
 
   return (

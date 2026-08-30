@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyMessage } from "viem";
 import {
-  setDisplayName, getWallet, DisplayNameError, normalizeAddress,
+  saveProfile, getWallet, DisplayNameError, normalizeAddress, type ProfileInput,
 } from "@predictarena/db";
 import { serverDb } from "@/lib/server";
 
@@ -9,10 +9,29 @@ export const dynamic = "force-dynamic";
 
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 
-/** The exact text a claimant signs. Includes the address so a signature
- *  captured for one name cannot be replayed to claim another. */
-export function claimMessage(address: string, name: string): string {
-  return `Prediction Leagues\n\nClaim the name "${name}" for ${normalizeAddress(address)}.\n\nThis is a signature, not a transaction. It costs nothing and moves nothing.`;
+/**
+ * The exact text a player signs to update their profile.
+ *
+ * It contains the address AND every field being written, so a signature is
+ * bound to specific content. Signing "name: alice" cannot be replayed to set a
+ * different name or to slip in a website the signer never saw.
+ *
+ * Both sides build this string from the same function, so they cannot drift.
+ */
+export function profileMessage(address: string, p: ProfileInput): string {
+  const lines = [
+    "Prediction Leagues",
+    "",
+    `Update the profile for ${normalizeAddress(address)}.`,
+    "",
+    `name: ${p.displayName ?? ""}`,
+    `bio: ${p.bio ?? ""}`,
+    `x: ${p.twitter ?? ""}`,
+    `web: ${p.website ?? ""}`,
+    "",
+    "This is a signature, not a transaction. It costs nothing and moves nothing.",
+  ];
+  return lines.join("\n");
 }
 
 export async function GET(request: Request): Promise<NextResponse> {
@@ -27,7 +46,11 @@ export async function GET(request: Request): Promise<NextResponse> {
       {
         address: normalizeAddress(wallet),
         displayName: row?.displayName ?? null,
+        bio: row?.bio ?? null,
+        twitter: row?.twitter ?? null,
+        website: row?.website ?? null,
         firstSeenAt: row?.firstSeenAt ? row.firstSeenAt.toISOString() : null,
+        profileUpdatedAt: row?.profileUpdatedAt ? row.profileUpdatedAt.toISOString() : null,
       },
       { headers: { "cache-control": "no-store" } },
     );
@@ -37,29 +60,25 @@ export async function GET(request: Request): Promise<NextResponse> {
 }
 
 /**
- * Claim a display name.
+ * Save a profile.
  *
- * The signature is the whole point. AGENTS.md section 5: the server trusts
- * nothing the client merely asserts, so a name is only written after the
- * message has been verified against the address that is claiming it. Without
- * this anyone could name anyone -- including taking a rival's handle on the
- * leaderboard.
- *
- * A signature costs nothing and moves nothing, which is why this is not a
- * transaction.
+ * The signature is the authorisation. AGENTS.md section 5: the server trusts
+ * nothing the client merely asserts, so nothing is written until the message
+ * has been verified against the address it claims to be. Without this, anyone
+ * could write anyone's profile -- including putting a link on a rival's page.
  */
 export async function POST(request: Request): Promise<NextResponse> {
-  let body: { address?: string; name?: string; signature?: string };
+  let body: { address?: string; profile?: ProfileInput; signature?: string };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ code: "BAD_REQUEST", message: "Expected JSON." }, { status: 400 });
   }
 
-  const { address, name, signature } = body;
-  if (!address || !ADDRESS.test(address) || !name || !signature) {
+  const { address, profile, signature } = body;
+  if (!address || !ADDRESS.test(address) || !profile || !signature) {
     return NextResponse.json(
-      { code: "BAD_REQUEST", message: "address, name and signature are all required." },
+      { code: "BAD_REQUEST", message: "address, profile and signature are all required." },
       { status: 400 },
     );
   }
@@ -68,7 +87,9 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     valid = await verifyMessage({
       address: address as `0x${string}`,
-      message: claimMessage(address, name),
+      // Rebuilt from what was SENT, so the signature covers exactly the values
+      // about to be stored.
+      message: profileMessage(address, profile),
       signature: signature as `0x${string}`,
     });
   } catch {
@@ -79,16 +100,23 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json(
       {
         code: "BAD_SIGNATURE",
-        message: "That signature does not match the address.",
-        action: "Sign the message with the wallet you are naming.",
+        message: "That signature does not match the address and details.",
+        action: "Sign again with the wallet you are editing.",
       },
       { status: 401 },
     );
   }
 
   try {
-    await setDisplayName(serverDb(), address, name);
-    return NextResponse.json({ address: normalizeAddress(address), displayName: name.trim() });
+    await saveProfile(serverDb(), address, profile);
+    const row = await getWallet(serverDb(), address);
+    return NextResponse.json({
+      address: normalizeAddress(address),
+      displayName: row?.displayName ?? null,
+      bio: row?.bio ?? null,
+      twitter: row?.twitter ?? null,
+      website: row?.website ?? null,
+    });
   } catch (e) {
     if (e instanceof DisplayNameError) {
       return NextResponse.json(
@@ -96,6 +124,6 @@ export async function POST(request: Request): Promise<NextResponse> {
         { status: 409 },
       );
     }
-    return NextResponse.json({ code: "API_DOWN", message: "Could not save that name." }, { status: 503 });
+    return NextResponse.json({ code: "API_DOWN", message: "Could not save your profile." }, { status: 503 });
   }
 }

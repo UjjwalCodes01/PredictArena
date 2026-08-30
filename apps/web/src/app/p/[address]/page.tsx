@@ -8,7 +8,7 @@
  * The owner gets one extra thing: the ability to put a name on it, proved by a
  * signature.
  */
-import { use, useState } from "react";
+import { use } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Image from "next/image";
 import { useAccount } from "wagmi";
@@ -16,7 +16,7 @@ import type { CallDto, StandingsResponse, ProfileDto } from "@/lib/types";
 import { amount, shortAddress, timeAgo } from "@/lib/format";
 import { Avatar } from "@/components/Avatar";
 import { ShareButton } from "@/components/ShareButton";
-import { ClaimNameForm } from "@/components/ClaimNameForm";
+import Link from "next/link";
 import { CopyAddress } from "@/components/CopyAddress";
 import { FormStrip } from "@/components/FormStrip";
 import { Card, Empty, ErrorNote, Skeleton, Stat, StatusPill } from "@/components/ui";
@@ -25,7 +25,6 @@ export default function ProfilePage({ params }: { params: Promise<{ address: str
   const { address } = use(params);
   const { address: connected } = useAccount();
   const isOwner = connected?.toLowerCase() === address.toLowerCase();
-  const [editing, setEditing] = useState(false);
 
   const profile = useQuery({
     queryKey: ["profile", address],
@@ -58,6 +57,9 @@ export default function ProfilePage({ params }: { params: Promise<{ address: str
     (s) => s.wallet.toLowerCase() === address.toLowerCase(),
   );
   const name = profile.data?.displayName ?? null;
+  const bio = profile.data?.bio ?? null;
+  const twitter = profile.data?.twitter ?? null;
+  const website = profile.data?.website ?? null;
   const list = calls.data?.calls ?? [];
 
   // Staked and won are summed as bigint: an amount must never pass through a
@@ -81,45 +83,64 @@ export default function ProfilePage({ params }: { params: Promise<{ address: str
           <div className="absolute inset-0 bg-black/45" />
         </div>
 
-        <div className="-mt-8 flex items-end justify-between gap-3 px-4 pb-4">
-          <div className="flex min-w-0 items-end gap-3">
-            <Avatar address={address} size={64} className="ring-4 ring-surface" />
-            <div className="min-w-0 pb-1">
-              <h1 className="truncate text-lg font-semibold tracking-tight text-ink">
-                {name ?? shortAddress(address)}
-              </h1>
-              <CopyAddress address={address} />
-            </div>
-          </div>
-          <div className="pb-1">
+        {/* The avatar overlaps the banner; the text sits below it so a long
+            name can never be clipped by the image above. */}
+        <div className="px-4 pb-4">
+          <div className="-mt-7 flex items-end justify-between gap-3">
+            <Avatar address={address} size={60} className="ring-4 ring-surface" />
             <ShareButton address={address} />
           </div>
+          <h1 className="mt-2 break-words text-lg font-bold uppercase tracking-tight text-ink">
+            {name ?? shortAddress(address)}
+          </h1>
+          <CopyAddress address={address} />
         </div>
+
+        {bio || twitter || website ? (
+          <div className="space-y-2 border-t border-border p-4">
+            {bio ? (
+              // Rendered as text, never as markup: React escapes it, and the
+              // server already refused anything but an http(s) link below.
+              <p className="text-sm leading-relaxed text-ink-soft">{bio}</p>
+            ) : null}
+            {twitter || website ? (
+              <div className="flex flex-wrap items-center gap-4">
+                {twitter ? (
+                  <a
+                    href={`https://x.com/${twitter}`}
+                    target="_blank"
+                    rel="noreferrer noopener nofollow"
+                    className="label text-accent hover:brightness-125"
+                  >
+                    @{twitter}
+                  </a>
+                ) : null}
+                {website ? (
+                  <a
+                    href={website}
+                    target="_blank"
+                    rel="noreferrer noopener nofollow"
+                    className="label max-w-full truncate text-accent hover:brightness-125"
+                  >
+                    {website.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                  </a>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         {isOwner ? (
           <div className="border-t border-border p-4">
-            {editing || !name ? (
-              <ClaimNameForm
-                currentName={name}
-                onSaved={() => {
-                  setEditing(false);
-                  void profile.refetch();
-                }}
-              />
-            ) : (
-              <button
-                onClick={() => setEditing(true)}
-                className="text-sm font-medium text-accent underline underline-offset-2"
-              >
-                Change your name
-              </button>
-            )}
+            <Link href="/settings" className="label text-accent hover:brightness-125">
+              [ EDIT YOUR PROFILE ]
+            </Link>
           </div>
         ) : null}
       </Card>
 
       {/* This week */}
-      <h2 className="mb-2 text-sm font-medium text-ink">This week</h2>
+      <h2 className="label mb-2">THIS WEEK</h2>
       <Card className="mb-4 p-4">
         {board.isPending ? (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -156,7 +177,7 @@ export default function ProfilePage({ params }: { params: Promise<{ address: str
       </Card>
 
       {/* All time, from the call history we hold */}
-      <h2 className="mb-2 text-sm font-medium text-ink">All time</h2>
+      <h2 className="label mb-2">ALL TIME</h2>
       <Card className="mb-4 p-4">
         {calls.isPending ? (
           <Skeleton className="h-12 w-full" />
@@ -183,7 +204,7 @@ export default function ProfilePage({ params }: { params: Promise<{ address: str
         )}
       </Card>
 
-      <h2 className="mb-2 text-sm font-medium text-ink">Call history</h2>
+      <h2 className="label mb-2">CALL HISTORY</h2>
       {calls.isPending ? (
         <Card className="divide-y divide-border">
           {[0, 1, 2].map((i) => (

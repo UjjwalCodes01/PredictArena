@@ -48,7 +48,7 @@ export default function HomePage() {
       {/* Newcomers get an explanation; returning players never see it. */}
       {!isConnected ? (
         <section aria-label="About the league" className="mt-10">
-          <h2 className="mb-3 text-sm font-medium text-ink">How the league works</h2>
+          <h2 className="label mb-2">HOW THE LEAGUE WORKS</h2>
           <div className="grid gap-3 sm:grid-cols-3">
             <Explainer
               image="/img/app-markets-phone.jpg"

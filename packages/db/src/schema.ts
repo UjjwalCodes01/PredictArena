@@ -140,6 +140,19 @@ export const wallets = pgTable(
      */
     displayName: text("display_name"),
     displayNameSetAt: timestamp("display_name_set_at", { withTimezone: true }),
+    /**
+     * Self-authored profile fields.
+     *
+     * All optional, all length-capped, and all written only after a signature
+     * from this address has been verified. Stored as plain text and escaped at
+     * render time -- nothing here is ever treated as markup.
+     */
+    bio: text("bio"),
+    /** Handle only, no leading @ and no URL: we build the link ourselves. */
+    twitter: text("twitter"),
+    /** Absolute http(s) URL. Any other scheme is rejected before it is stored. */
+    website: text("website"),
+    profileUpdatedAt: timestamp("profile_updated_at", { withTimezone: true }),
   },
   (t) => [
     // Case-insensitive uniqueness: "Alice" and "alice" must not be two players.

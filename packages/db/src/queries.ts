@@ -242,6 +242,138 @@ export async function setDisplayName(db: Database, address: string, name: string
   }
 }
 
+/**
+ * Everything a player may write about themselves.
+ *
+ * Deliberately small. A league profile is a label and two links, not a social
+ * network, and every extra free-text field is another thing to moderate.
+ */
+export interface ProfileInput {
+  displayName?: string | null;
+  bio?: string | null;
+  twitter?: string | null;
+  website?: string | null;
+}
+
+export const BIO_MAX = 160;
+const TWITTER_RE = /^[A-Za-z0-9_]{1,15}$/;
+
+/**
+ * Validate and normalise a profile.
+ *
+ * Runs on the SERVER, never in the browser: client-side validation is a
+ * convenience for the user, not a control (AGENTS.md -- the server trusts
+ * nothing the client asserts).
+ */
+export function normalizeProfile(input: ProfileInput): ProfileInput {
+  const out: ProfileInput = {};
+
+  if (input.displayName !== undefined) {
+    const v = (input.displayName ?? "").trim();
+    if (v === "") out.displayName = null;
+    else if (!DISPLAY_NAME_RE.test(v)) {
+      throw new DisplayNameError("INVALID", "Names are 3-20 characters: letters, numbers, hyphen or underscore.");
+    } else out.displayName = v;
+  }
+
+  if (input.bio !== undefined) {
+    const v = (input.bio ?? "").trim();
+    if (v.length > BIO_MAX) {
+      throw new DisplayNameError("INVALID", `A bio is at most ${BIO_MAX} characters.`);
+    }
+    out.bio = v === "" ? null : v;
+  }
+
+  if (input.twitter !== undefined) {
+    // Accept what people paste -- a URL, an @handle -- and store the handle.
+    const raw = (input.twitter ?? "").trim().replace(/^@/, "").replace(/^https?:\/\/(www\.)?(x|twitter)\.com\//i, "").replace(/\/$/, "");
+    if (raw === "") out.twitter = null;
+    else if (!TWITTER_RE.test(raw)) {
+      throw new DisplayNameError("INVALID", "That does not look like an X handle.");
+    } else out.twitter = raw;
+  }
+
+  if (input.website !== undefined) {
+    const v = (input.website ?? "").trim();
+    if (v === "") out.website = null;
+    else {
+      // If the input carries ANY scheme, it must be one we allow. Only a
+      // scheme-less input gets https:// prepended.
+      //
+      // Prepending unconditionally was a bug: "file:///etc/passwd" became
+      // "https://file:///etc/passwd", which parses cleanly and passed the
+      // protocol check -- silently storing mangled input instead of refusing
+      // it. Detect the scheme first, then decide.
+      const hasScheme = /^[a-z][a-z0-9+.-]*:/i.test(v);
+      if (hasScheme && !/^https?:\/\//i.test(v)) {
+        throw new DisplayNameError("INVALID", "Only http and https addresses are allowed.");
+      }
+
+      let url: URL;
+      try {
+        url = new URL(hasScheme ? v : `https://${v}`);
+      } catch {
+        throw new DisplayNameError("INVALID", "That does not look like a web address.");
+      }
+      // Belt and braces: the parsed protocol must still be one we allow.
+      if (url.protocol !== "http:" && url.protocol !== "https:") {
+        throw new DisplayNameError("INVALID", "Only http and https addresses are allowed.");
+      }
+      if (!url.hostname || !url.hostname.includes(".")) {
+        throw new DisplayNameError("INVALID", "That does not look like a web address.");
+      }
+      if (url.href.length > 200) {
+        throw new DisplayNameError("INVALID", "That web address is too long.");
+      }
+      out.website = url.href;
+    }
+  }
+
+  return out;
+}
+
+/**
+ * Save a profile.
+ *
+ * The CALLER must have verified a signature from this address first. This
+ * function trusts its arguments; the API route in front of it is where
+ * ownership is proved.
+ */
+export async function saveProfile(db: Database, address: string, input: ProfileInput): Promise<void> {
+  const clean = normalizeProfile(input);
+  const wallet = normalizeAddress(address);
+  const now = new Date();
+
+  const set: Record<string, unknown> = { lastSeenAt: now, profileUpdatedAt: now };
+  if (clean.displayName !== undefined) { set["displayName"] = clean.displayName; set["displayNameSetAt"] = now; }
+  if (clean.bio !== undefined) set["bio"] = clean.bio;
+  if (clean.twitter !== undefined) set["twitter"] = clean.twitter;
+  if (clean.website !== undefined) set["website"] = clean.website;
+
+  try {
+    await db
+      .insert(wallets)
+      .values({
+        address: wallet,
+        firstSeenAt: now,
+        lastSeenAt: now,
+        profileUpdatedAt: now,
+        ...(clean.displayName !== undefined ? { displayName: clean.displayName, displayNameSetAt: now } : {}),
+        ...(clean.bio !== undefined ? { bio: clean.bio } : {}),
+        ...(clean.twitter !== undefined ? { twitter: clean.twitter } : {}),
+        ...(clean.website !== undefined ? { website: clean.website } : {}),
+      })
+      .onConflictDoUpdate({ target: wallets.address, set });
+  } catch (e) {
+    // The unique index arbitrates, not a prior lookup: checking first would
+    // race two people claiming one name.
+    if (String(e).includes("wallets_display_name_uidx")) {
+      throw new DisplayNameError("TAKEN", `"${clean.displayName}" is already taken.`);
+    }
+    throw e;
+  }
+}
+
 export async function getWallet(db: Database, address: string) {
   const [row] = await db
     .select()

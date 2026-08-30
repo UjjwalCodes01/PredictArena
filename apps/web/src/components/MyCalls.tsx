@@ -37,7 +37,7 @@ export function MyCalls({ refreshKey }: { refreshKey: number }) {
 
   return (
     <section aria-label="Your calls" className="mt-8">
-      <h2 className="mb-3 text-sm font-medium text-ink">Your calls</h2>
+      <h2 className="label mb-2">YOUR CALLS</h2>
 
       {isPending ? (
         <Card className="divide-y divide-border">
