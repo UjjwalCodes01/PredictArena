@@ -11,9 +11,10 @@ import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAccount } from "wagmi";
 import { usePending, reconcile } from "@/lib/pending";
+import { useSettlementStream } from "@/hooks/useSettlementStream";
 import type { CallDto } from "@/lib/types";
 import { amount, timeAgo } from "@/lib/format";
-import { Card, Empty, ErrorNote, Skeleton, StatusPill } from "./ui";
+import { Card, Empty, ErrorNote, Skeleton, StatusPill, LiveDot } from "./ui";
 
 async function fetchCalls(wallet: string): Promise<{ calls: CallDto[] }> {
   const r = await fetch(`/api/positions?wallet=${wallet}`, { cache: "no-store" });
@@ -26,16 +27,20 @@ async function fetchCalls(wallet: string): Promise<{ calls: CallDto[] }> {
 
 export function MyCalls({ refreshKey }: { refreshKey: number }) {
   const { address, isConnected } = useAccount();
+  const pending = usePending(address);
+  // Push when available; the poll below remains the guarantee.
+  const stream = useSettlementStream(address);
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ["positions", address, refreshKey],
     queryFn: () => fetchCalls(address!),
     enabled: Boolean(address),
-    // A settlement should show up within a minute of the indexer knowing.
-    refetchInterval: 15_000,
+    // Polling is the GUARANTEE, the stream is the optimisation. When the
+    // stream is live this only has to cover the moment a reconnect straddles,
+    // so it backs right off instead of switching off -- a stream that silently
+    // stops delivering would otherwise freeze the list forever.
+    refetchInterval: stream === "live" ? 60_000 : 15_000,
   });
-
-  const pending = usePending(address);
 
   // Drop optimistic rows the indexer has now reported. Matched on transaction
   // hash, so the real record always replaces the placeholder rather than
@@ -49,8 +54,17 @@ export function MyCalls({ refreshKey }: { refreshKey: number }) {
   const hasAnything = pending.length > 0 || (data?.calls.length ?? 0) > 0;
 
   return (
-    <section aria-label="Your calls" className="mt-8">
-      <h2 className="label mb-2">YOUR CALLS</h2>
+    <section aria-label="Your calls" className="mt-8 lg:mt-0">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <h2 className="label">YOUR CALLS</h2>
+        {stream === "live" ? (
+          <LiveDot label="LIVE" />
+        ) : stream === "fallback" ? (
+          <span className="label" title="The live channel is unavailable; updates arrive on a timer.">
+            UPDATING ON A TIMER
+          </span>
+        ) : null}
+      </div>
 
       {isPending ? (
         <Card className="divide-y divide-border">

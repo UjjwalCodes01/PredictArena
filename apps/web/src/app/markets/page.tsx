@@ -52,7 +52,7 @@ export default function MarketsPage() {
   return (
     <>
       <div className="mb-4 overflow-hidden rounded-xl border border-border">
-        <div className="relative h-28 w-full sm:h-32">
+        <div className="relative h-28 w-full sm:h-32 lg:h-40">
           <Image src="/img/btc-on-chart.jpg" alt="" fill priority sizes="(max-width: 672px) 100vw, 672px" className="object-cover" />
           <div className="absolute inset-0 bg-black/55" />
           <div className="absolute inset-0 flex flex-col justify-end p-4">
@@ -105,11 +105,14 @@ export default function MarketsPage() {
           />
         </Card>
       ) : (
-        <Card className="divide-y divide-border">
+        <Card className="divide-y divide-border lg:grid lg:grid-cols-2 lg:divide-y-0 xl:grid-cols-3">
           {rows.map((w) => {
             const left = w.closesAtSec - now() / 1000;
             return (
-              <div key={w.marketId} className="flex items-center justify-between gap-3 p-4">
+              <div
+                key={w.marketId}
+                className="flex items-center justify-between gap-3 border-b border-border p-4 last:border-b-0 lg:border-r lg:[&:nth-child(2n)]:border-r-0 xl:[&:nth-child(2n)]:border-r xl:[&:nth-child(3n)]:border-r-0"
+              >
                 <div className="flex min-w-0 items-center gap-3">
                   <Image
                     src={ASSET_IMAGE[w.asset] ?? FALLBACK_IMAGE}

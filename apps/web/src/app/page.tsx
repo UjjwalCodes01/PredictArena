@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useAccount } from "wagmi";
 import { WindowFeed } from "@/components/WindowFeed";
-import { MyCalls } from "@/components/MyCalls";
+import { SidePanel } from "@/components/SidePanel";
 import { NetworkBanner } from "@/components/Wallet";
 import { Card } from "@/components/ui";
 
@@ -20,7 +20,7 @@ export default function HomePage() {
       <NetworkBanner />
 
       <div className="mb-5 overflow-hidden rounded-xl border border-border">
-        <div className="relative h-36 w-full sm:h-44">
+        <div className="relative h-36 w-full sm:h-44 lg:h-56">
           <Image
             src="/img/chart-candles-dark.jpg"
             alt=""
@@ -31,7 +31,7 @@ export default function HomePage() {
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-black/25" />
           <div className="absolute inset-0 flex flex-col justify-end p-4">
-            <h1 className="text-xl font-semibold tracking-tight text-white sm:text-2xl">
+            <h1 className="text-xl font-semibold tracking-tight text-white sm:text-2xl lg:text-3xl">
               Call the next move
             </h1>
             <p className="mt-1 max-w-md text-sm text-white/85">
@@ -42,14 +42,28 @@ export default function HomePage() {
         </div>
       </div>
 
-      <WindowFeed onPlaced={() => setPlaced((n) => n + 1)} />
-      <MyCalls refreshKey={placed} />
+      {/*
+        Two columns from lg up: the decision on the left, your record on the
+        right. Below that they stack in the same order, so a phone still reads
+        top to bottom as act-then-review.
+
+        The action column is wider because it holds the only thing on this page
+        with a deadline attached.
+      */}
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] xl:gap-6">
+        <div className="min-w-0">
+          <WindowFeed onPlaced={() => setPlaced((n) => n + 1)} />
+        </div>
+        <div className="min-w-0">
+          <SidePanel refreshKey={placed} />
+        </div>
+      </div>
 
       {/* Newcomers get an explanation; returning players never see it. */}
       {!isConnected ? (
         <section aria-label="About the league" className="mt-10">
           <h2 className="label mb-2">HOW THE LEAGUE WORKS</h2>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-3 lg:gap-4">
             <Explainer
               image="/img/app-markets-phone.jpg"
               title="One tap"

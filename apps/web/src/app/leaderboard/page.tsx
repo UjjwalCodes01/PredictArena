@@ -62,7 +62,7 @@ export default function LeaderboardPage() {
   return (
     <>
       <div className="mb-4 overflow-hidden rounded-xl border border-border">
-        <div className="relative h-28 w-full sm:h-32">
+        <div className="relative h-28 w-full sm:h-32 lg:h-40">
           <Image
             src="/img/finance-district.jpg"
             alt=""
@@ -149,6 +149,16 @@ export default function LeaderboardPage() {
         </Card>
       ) : (
         <Card className="overflow-hidden">
+          {/* Column names belong once, at the top. Repeating them on every row
+              turned a 146-row table into 438 redundant words. */}
+          <div className="hidden items-center gap-3 border-b border-border px-4 py-2 md:flex">
+            <span className="label w-6">#</span>
+            <span className="label flex-1">PLAYER</span>
+            <span className="label w-16 text-right">W-L</span>
+            <span className="label w-16 text-right">STREAK</span>
+            <span className="label w-20 text-right">ACCURACY</span>
+            <span className="label w-12 text-right">POINTS</span>
+          </div>
           <ul className="divide-y divide-border">
             {rows.map((s) => (
               <li
@@ -164,14 +174,30 @@ export default function LeaderboardPage() {
                     displayName={s.displayName}
                     you={me === s.wallet.toLowerCase()}
                   />
-                  <p className="tabular mt-1 text-xs text-ink-faint">
+                  {/* Below md the stats read as one line under the name; from md
+                      up they become their own columns, which is what the extra
+                      width is for. */}
+                  <p className="tabular mt-1 text-xs text-ink-faint md:hidden">
                     {s.wins}W {s.losses}L
                     {s.voids > 0 ? ` ${s.voids}V` : ""}
                     {s.currentStreak >= 2 ? ` · ${s.currentStreak} in a row` : ""}
                     {s.calibration !== null ? ` · ${s.calibration}% accurate` : ""}
                   </p>
                 </div>
-                <span className="tabular shrink-0 text-sm font-semibold text-ink">{s.points}</span>
+
+                <span className="tabular hidden w-16 shrink-0 text-right text-sm text-ink-soft md:block">
+                  {s.wins}-{s.losses}
+                </span>
+                <span className="tabular hidden w-16 shrink-0 text-right text-sm text-ink-soft md:block">
+                  {s.currentStreak >= 2 ? s.currentStreak : "—"}
+                </span>
+                <span className="tabular hidden w-20 shrink-0 text-right text-sm text-ink-soft md:block">
+                  {s.calibration === null ? "—" : `${s.calibration}%`}
+                </span>
+
+                <span className="tabular w-12 shrink-0 text-right text-sm font-semibold text-ink">
+                  {s.points}
+                </span>
               </li>
             ))}
           </ul>
@@ -186,3 +212,4 @@ export default function LeaderboardPage() {
     </>
   );
 }
+

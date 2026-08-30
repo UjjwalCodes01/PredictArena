@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getRecentCalls, getLeagueTotals, currentWeekId, getDisplayNames } from "@predictarena/db";
-import { serverDb } from "@/lib/server";
+import { serverDb, dbRead } from "@/lib/server";
 import { cached } from "@/lib/cache";
 
 export const dynamic = "force-dynamic";
@@ -19,12 +19,12 @@ export async function GET(request: Request): Promise<NextResponse> {
     const db = serverDb();
     const week = currentWeekId();
     const [rows, totals] = await Promise.all([
-      cached(`recent:${settledOnly}`, 6_000, () => getRecentCalls(db, { limit: 50, settledOnly })),
-      cached(`totals:${week}`, 6_000, () => getLeagueTotals(db, week)),
+      cached(`recent:${settledOnly}`, 6_000, () => dbRead(() => getRecentCalls(db, { limit: 50, settledOnly }))),
+      cached(`totals:${week}`, 6_000, () => dbRead(() => getLeagueTotals(db, week))),
     ]);
 
     const names = await cached(`names:recent:${settledOnly}`, 6_000, () =>
-      getDisplayNames(db, rows.map((r) => r.wallet)),
+      dbRead(() => getDisplayNames(db, rows.map((r) => r.wallet))),
     );
 
     return NextResponse.json(

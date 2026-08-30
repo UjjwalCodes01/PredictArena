@@ -127,6 +127,9 @@ export default function SettingsPage() {
   return (
     <>
       <NetworkBanner />
+      {/* A form is a reading task, not a dashboard: give it a measure and
+          centre it rather than stretching inputs across the screen. */}
+      <div className="mx-auto w-full max-w-3xl">
       <h1 className="mb-1 text-lg font-bold uppercase tracking-tight text-ink">Your profile</h1>
       <p className="mb-4 text-sm text-ink-soft">
         Shown on the leaderboard and your public page. All of it is optional.
@@ -224,6 +227,7 @@ export default function SettingsPage() {
         ) : null}
         {error ? <ErrorNote title={error.message} {...(error.action ? { action: error.action } : {})} /> : null}
       </form>
+      </div>
     </>
   );
 }

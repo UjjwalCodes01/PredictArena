@@ -34,10 +34,34 @@ export function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-bg/85 backdrop-blur">
-      <div className="mx-auto flex w-full max-w-2xl items-center gap-3 px-4 py-3">
+      <div className="mx-auto flex w-full max-w-[1600px] items-center gap-6 px-4 py-3 sm:px-6 lg:px-8">
         <Link href="/" className="shrink-0 text-sm font-semibold tracking-tight text-ink">
           Prediction Leagues
         </Link>
+
+        {/* From md up the nav sits inline; below that it drops to its own row
+            and scrolls sideways, so a 390px screen never needs a menu. */}
+        <nav aria-label="Main" className="hidden md:block">
+          <ul className="flex items-center gap-1">
+            {items.map((item) => {
+              const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+              return (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    aria-current={active ? "page" : undefined}
+                    className={`block whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm transition-colors ${
+                      active ? "bg-accent-soft font-medium text-accent" : "text-ink-soft hover:text-ink"
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+
         <div className="ml-auto">
           <ConnectButton />
         </div>
@@ -45,7 +69,7 @@ export function SiteHeader() {
 
       <nav
         aria-label="Main"
-        className="mx-auto w-full max-w-2xl overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="mx-auto w-full max-w-[1600px] overflow-x-auto px-4 pb-2 sm:px-6 md:hidden lg:px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         <ul className="flex items-center gap-1">
           {items.map((item) => {
@@ -73,7 +97,7 @@ export function SiteHeader() {
 export function SiteFooter() {
   return (
     <footer className="mt-16 border-t border-border">
-      <div className="mx-auto flex w-full max-w-2xl flex-wrap items-center gap-x-5 gap-y-2 px-4 py-6 text-sm text-ink-soft">
+      <div className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center gap-x-5 gap-y-2 px-4 py-6 text-sm text-ink-soft sm:px-6 lg:px-8">
         <Link href="/how-it-works" className="hover:text-ink">
           How it works
         </Link>

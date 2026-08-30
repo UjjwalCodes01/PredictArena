@@ -118,9 +118,12 @@ export default function ActivityPage() {
           />
         </Card>
       ) : (
-        <Card className="divide-y divide-border">
+        <Card className="divide-y divide-border lg:grid lg:grid-cols-2 lg:divide-y-0">
           {data.calls.map((c) => (
-            <div key={c.id} className="flex items-center justify-between gap-3 p-4">
+            <div
+              key={c.id}
+              className="flex items-center justify-between gap-3 border-b border-border p-4 last:border-b-0 lg:border-r lg:[&:nth-child(2n)]:border-r-0"
+            >
               <div className="min-w-0 flex-1">
                 <PlayerIdentity address={c.wallet} displayName={c.displayName} size={28} />
                 <p className="tabular mt-1 text-xs text-ink-faint">

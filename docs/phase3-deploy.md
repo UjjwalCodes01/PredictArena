@@ -77,6 +77,45 @@ Run against the **deployed** URL, on a phone, with a wallet that has never used 
 | 14 | **Share card** | Paste your `/p/<address>` link into any chat; the preview shows rank and record. |
 | 15 | **Airplane mode mid-view** | Panels show an error with a retry, not a white screen. |
 
+### Cold starts
+
+The database is serverless and suspends when idle; waking it takes ten to twenty seconds. Measured
+on a fresh server, `/api/standings` returned **503 after 41 seconds** of retries — the exact state a
+judge opening a link arrives in.
+
+Two changes fix it:
+
+- `apps/web/instrumentation.ts` runs once per server instance **before it serves traffic** and
+  performs the real leaderboard query (not a `SELECT 1` — that query is the heaviest read the app
+  makes and the one that timed out). It retries, and logs each leg:
+  `[warm-up] database: ready, chain clock: ready`.
+- `dbRead()` wraps every database read in the request path with a bounded retry, sized against an
+  actual wake-up rather than a guess, for a database that suspends again while the server runs.
+
+First-visitor latency on standings went from **20.9s (or a 503) to 1.4s**.
+
+On Vercel each cold serverless instance runs the same warm-up, so the cost is paid per instance
+rather than per visitor.
+
+### Live settlement updates
+
+Task 4 asks for push over polling. `/api/stream` is a Server-Sent Events endpoint that watches one
+wallet's call statuses and emits `changed` when any of them move; the browser then re-reads through
+the normal endpoint, so there is exactly one code path shaping call data.
+
+**Polling is still the guarantee.** The stream is an optimisation and is treated as one: the client
+keeps a slow poll running (60s while the stream is live, 15s when it is not), because corporate
+proxies strip `text/event-stream`, serverless platforms cap connection lifetime, and phones suspend
+background tabs. A stream that silently stops delivering must not freeze the list.
+
+Two deployment notes:
+
+- The server closes each stream at **4 minutes** and the client reconnects with backoff. That is
+  deliberately under typical serverless wall-time caps, so the browser reconnects on our terms
+  rather than seeing a truncated response.
+- The response sets `x-accel-buffering: no`. Nginx buffers proxied responses by default, which
+  would hold every event until the stream ended — exactly defeating the point.
+
 ### Covered since the first pass
 
 - **WalletConnect** is offered when `WALLETCONNECT_PROJECT_ID` is set, so the matrix can be run
@@ -89,6 +128,13 @@ Run against the **deployed** URL, on a phone, with a wallet that has never used 
   record. Case 7 no longer shows an empty list between signing and indexing.
 - **Session state clears on account switch**, so case 8 cannot show one account's calls under
   another's name.
+- **A window that locks mid-decision rolls to the next one with a notice**, rather than leaving a
+  dead panel with an error in it (case 9).
+- **An order that cannot fill says so specifically.** An IOC with no depth on the other side
+  reverts with `ImmediateOrCancel`; that is now `NO_LIQUIDITY` with "try a smaller stake, or the
+  other direction", not the generic "the window locked, the price moved, or escrow was short".
+  Live testing hit this five times consecutively on a 80-83% favourite — nobody sells a
+  near-certainty, so the ask side on a favourite is often empty.
 
 ### The core loop, proven end to end on live testnet
 

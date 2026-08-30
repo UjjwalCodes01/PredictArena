@@ -35,7 +35,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             Skip to content
           </a>
           <SiteHeader />
-          <main id="main" className="mx-auto w-full max-w-2xl flex-1 px-4 pb-12 pt-6">
+          {/*
+            One shared shell width, set here and matched by the header and
+            footer so the three never disagree.
+
+            The cap is generous rather than absent: a readout stretched across
+            an ultrawide display puts a countdown and its buttons a head-turn
+            apart. 1600px keeps a two-column dashboard comfortable and stops
+            there.
+          */}
+          <main
+            id="main"
+            className="mx-auto w-full max-w-[1600px] flex-1 px-4 pb-12 pt-5 sm:px-6 lg:px-8"
+          >
             {children}
           </main>
           <SiteFooter />

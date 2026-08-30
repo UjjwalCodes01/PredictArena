@@ -29,10 +29,13 @@ export function CallPanel({
   window: w,
   secondsLeft,
   onPlaced,
+  onWindowClosed,
 }: {
   window: WindowDto;
   secondsLeft: number;
   onPlaced: () => void;
+  /** The window locked while the user was deciding; the feed rolls and says so. */
+  onWindowClosed: () => void;
 }) {
   const { isConnected } = useAccount();
   const wrongNetwork = useIsWrongNetwork();
@@ -78,6 +81,17 @@ export function CallPanel({
       .finally(() => { if (!cancelled) setQuoting(false); });
     return () => { cancelled = true; };
   }, [direction, stake, w.marketId]);
+
+  // A window that locked mid-decision is not an error the user can act on --
+  // roll them onto the next one rather than leaving a dead panel with a
+  // message in it. The plan asks for exactly this: roll, with a notice.
+  useEffect(() => {
+    if (phase.kind === "error" && phase.code === "WINDOW_CLOSED") {
+      onWindowClosed();
+      const t = setTimeout(reset, 400);
+      return () => clearTimeout(t);
+    }
+  }, [phase, onWindowClosed, reset]);
 
   // A completed call clears the form so the panel is ready for the next window.
   useEffect(() => {

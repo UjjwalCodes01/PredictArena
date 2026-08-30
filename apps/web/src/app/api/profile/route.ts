@@ -3,7 +3,7 @@ import { verifyMessage } from "viem";
 import {
   saveProfile, getWallet, DisplayNameError, normalizeAddress, type ProfileInput,
 } from "@predictarena/db";
-import { serverDb } from "@/lib/server";
+import { serverDb, dbRead } from "@/lib/server";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +41,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     return NextResponse.json({ code: "BAD_REQUEST", message: "A valid wallet is required." }, { status: 400 });
   }
   try {
-    const row = await getWallet(serverDb(), wallet);
+    const row = await dbRead(() => getWallet(serverDb(), wallet));
     return NextResponse.json(
       {
         address: normalizeAddress(wallet),

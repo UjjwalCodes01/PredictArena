@@ -64,6 +64,16 @@ export function WindowFeed({ onPlaced }: { onPlaced: () => void }) {
   const secondsLeft = chosen ? chosen.closesAtSec - now() / 1000 : 0;
   const handlePlaced = useCallback(() => { onPlaced(); void refetch(); }, [onPlaced, refetch]);
 
+  // Shown after a window locks mid-decision, so the swap underneath the user is
+  // explained rather than just happening.
+  const [rolled, setRolled] = useState(false);
+  const handleWindowClosed = useCallback(() => {
+    setRolled(true);
+    void refetch();
+    // Long enough to read, short enough not to linger over the next decision.
+    setTimeout(() => setRolled(false), 8000);
+  }, [refetch]);
+
   return (
     <section aria-label="Place a call">
       <div className="mb-3 flex items-center gap-1" role="group" aria-label="Asset">
@@ -107,6 +117,13 @@ export function WindowFeed({ onPlaced }: { onPlaced: () => void }) {
         </Card>
       ) : (
         <div className="space-y-3">
+          {rolled ? (
+            <div role="status" className="rounded-md border border-warn/40 bg-warn-soft/60 px-3 py-2">
+              <p className="text-sm text-ink">
+                That window closed while you were deciding. You are on the next one.
+              </p>
+            </div>
+          ) : null}
           <Panel
             label={`${chosen.asset} · ${seriesLabel(chosen.intervalSec)} WINDOW`}
             aside={<span className="label">{chosen.isTradable ? "OPEN" : "LOCKED"}</span>}
@@ -128,7 +145,12 @@ export function WindowFeed({ onPlaced }: { onPlaced: () => void }) {
             </div>
           </Panel>
 
-          <CallPanel window={chosen} secondsLeft={secondsLeft} onPlaced={handlePlaced} />
+          <CallPanel
+            window={chosen}
+            secondsLeft={secondsLeft}
+            onPlaced={handlePlaced}
+            onWindowClosed={handleWindowClosed}
+          />
 
           {/*
             What comes next. Two honest cases, and no invented times:

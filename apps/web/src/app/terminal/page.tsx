@@ -143,7 +143,7 @@ export default function TerminalPage() {
       ) : null}
 
       {/* Readout row */}
-      <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4 xl:gap-4">
         <Panel label="TIME TO CLOSE" bodyClass="p-3">
           {isPending ? <Skeleton className="h-7 w-20" /> : (
             <span className="tabular text-2xl font-bold leading-none text-accent">
@@ -174,7 +174,13 @@ export default function TerminalPage() {
         </Panel>
       </div>
 
-      <div className="space-y-3">
+      {/*
+        On a wide screen the two traces sit side by side and the book and
+        parameters share the row beneath, which is how a telemetry readout is
+        actually laid out. Below xl they stack, because two 300px-wide charts
+        are worse than one readable one.
+      */}
+      <div className="grid gap-3 xl:grid-cols-2 xl:gap-4">
         <Panel
           label={`${asset}/USD · UNDERLYING PRICE`}
           aside={
@@ -187,7 +193,7 @@ export default function TerminalPage() {
           {isPending ? <Skeleton className="h-28 w-full" /> : (
             <LineChart
               points={priceTrace}
-              height={130}
+              height={190}
               color="var(--color-accent)"
               format={(v) => v.toLocaleString(undefined, { maximumFractionDigits: 2 })}
             />
@@ -202,14 +208,14 @@ export default function TerminalPage() {
           {isPending ? <Skeleton className="h-24 w-full" /> : (
             <LineChart
               points={beliefTrace}
-              height={110}
+              height={190}
               color="var(--color-up)"
               format={(v) => `${(v * 100).toFixed(1)}%`}
             />
           )}
         </Panel>
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2 xl:col-span-2 xl:gap-4">
           <Panel label="ORDER BOOK DEPTH" bodyClass="p-3">
             {isPending ? <Skeleton className="h-28 w-full" /> : (
               <DepthChart

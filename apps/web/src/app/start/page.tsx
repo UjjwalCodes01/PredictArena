@@ -37,7 +37,7 @@ export default function StartPage() {
         </p>
       </div>
 
-      <ol className="space-y-3">
+      <ol className="grid gap-3 lg:grid-cols-2">
         <Step n={1} title="Connect a wallet" done={isConnected} image="/img/laptop-hands.jpg">
           {isConnected ? (
             <p className="tabular text-sm text-ink-soft">Connected as {shortAddress(address!)}.</p>

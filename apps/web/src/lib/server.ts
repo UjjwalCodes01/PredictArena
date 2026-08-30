@@ -34,3 +34,42 @@ export function serverDb(): Database {
   dbSingleton ??= createDb(url);
   return dbSingleton;
 }
+
+/**
+ * Retry a READ through a database that may be asleep.
+ *
+ * Neon suspends a project when it is idle, and the first query after that can
+ * time out at the connection layer rather than returning anything. Without this
+ * the very first visitor to a cold deployment gets a 503 on the leaderboard,
+ * activity, portfolio and profile at once -- which is precisely the state a
+ * judge or a new player arrives in.
+ *
+ * READS ONLY. Every caller here is a SELECT, so retrying is safe by
+ * construction; a write must decide for itself whether it is idempotent.
+ *
+ * Backoff is sized against an actual Neon wake-up, which takes ten to twenty
+ * seconds -- an 800ms retry simply fails three times in a row and reports a
+ * 503 that a longer wait would have avoided. Start-up warm-up (see
+ * `instrumentation.ts`) is the real remedy; this covers a database that
+ * suspends again while the server is still running.
+ */
+export async function dbRead<T>(
+  fn: () => Promise<T>,
+  attempts = 3,
+  // Injectable so tests exercise the retry logic without waiting seven real
+  // seconds. Production never passes it.
+  baseDelayMs = 2_500,
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastError = e;
+      if (attempt < attempts) {
+        await new Promise((r) => setTimeout(r, attempt * baseDelayMs));
+      }
+    }
+  }
+  throw lastError;
+}

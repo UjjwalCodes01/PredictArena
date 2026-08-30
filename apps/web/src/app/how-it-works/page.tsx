@@ -24,7 +24,9 @@ export default function HowItWorksPage() {
         </p>
       </div>
 
-      <div className="space-y-4">
+      {/* Two columns of cards on a wide screen. Each card's prose stays inside
+          its own column, so the measure never runs to a full 1600px line. */}
+      <div className="grid gap-4 lg:grid-cols-2">
         <Section title="The call" image="/img/buy-sell-cards.jpg">
           <p>
             Each window asks one question: will BTC or ETH close higher than it opened? You pick
