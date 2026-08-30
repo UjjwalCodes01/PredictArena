@@ -11,11 +11,9 @@
  */
 import { useQuery } from "@tanstack/react-query";
 import { useAccount } from "wagmi";
-import { createDexClient, getBalances, type Balances } from "@predictarena/dex";
-import { RPC_URL } from "@/lib/wagmi";
+import { getBalances, type Balances } from "@predictarena/dex";
+import { getReadClient } from "@/lib/dexClient";
 
-const INDEXER_URL =
-  process.env["NEXT_PUBLIC_INDEXER_URL"] ?? "https://dev.smk.somnia.host/v1/graphql";
 
 export function useBalances(pool?: `0x${string}`) {
   const { address, isConnected } = useAccount();
@@ -23,8 +21,9 @@ export function useBalances(pool?: `0x${string}`) {
   return useQuery<Balances>({
     queryKey: ["balances", address, pool ?? "none"],
     queryFn: async () => {
-      const dex = createDexClient({ indexerUrl: INDEXER_URL, rpcHttpUrl: RPC_URL });
-      return getBalances(dex, address as `0x${string}`, pool);
+      // Shared read client: constructing one per poll leaked a client every
+      // twenty seconds and eventually froze the tab.
+      return getBalances(getReadClient(), address as `0x${string}`, pool);
     },
     enabled: Boolean(address) && isConnected,
     // Balances move when the user funds a wallet or places a call. Often enough

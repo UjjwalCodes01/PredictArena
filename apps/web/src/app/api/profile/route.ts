@@ -4,6 +4,7 @@ import {
   saveProfile, getWallet, DisplayNameError, normalizeAddress, type ProfileInput,
 } from "@predictarena/db";
 import { serverDb, dbRead } from "@/lib/server";
+import { rateLimit, clientKey, tooManyRequests } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,9 @@ export function profileMessage(address: string, p: ProfileInput): string {
 }
 
 export async function GET(request: Request): Promise<NextResponse> {
+  const limit = rateLimit(clientKey(request), { capacity: 20, refillPerSec: 1 });
+  if (!limit.ok) return tooManyRequests(limit) as never;
+
   const { searchParams } = new URL(request.url);
   const wallet = searchParams.get("wallet");
   if (!wallet || !ADDRESS.test(wallet)) {
@@ -68,6 +72,9 @@ export async function GET(request: Request): Promise<NextResponse> {
  * could write anyone's profile -- including putting a link on a rival's page.
  */
 export async function POST(request: Request): Promise<NextResponse> {
+  const limit = rateLimit(clientKey(request), { capacity: 20, refillPerSec: 1 });
+  if (!limit.ok) return tooManyRequests(limit) as never;
+
   let body: { address?: string; profile?: ProfileInput; signature?: string };
   try {
     body = await request.json();

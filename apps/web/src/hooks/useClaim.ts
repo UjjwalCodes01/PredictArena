@@ -13,11 +13,9 @@
  */
 import { useCallback, useRef, useState } from "react";
 import { useAccount, useWalletClient } from "wagmi";
-import { createDexClient, redeem, DexError, type Direction } from "@predictarena/dex";
-import { RPC_URL } from "@/lib/wagmi";
+import { redeem, DexError, type Direction } from "@predictarena/dex";
+import { getWalletDexClient } from "@/lib/dexClient";
 
-const INDEXER_URL =
-  process.env["NEXT_PUBLIC_INDEXER_URL"] ?? "https://dev.smk.somnia.host/v1/graphql";
 
 export type ClaimPhase =
   | { kind: "idle" }
@@ -59,12 +57,7 @@ export function useClaim() {
       setPhase({ kind: "claiming", marketId });
 
       try {
-        const dex = createDexClient({
-          indexerUrl: INDEXER_URL,
-          rpcHttpUrl: RPC_URL,
-          walletClient,
-          account: address,
-        });
+        const dex = getWalletDexClient(walletClient, address);
 
         const result = await redeem(dex, {
           marketId: marketId as `0x${string}`,

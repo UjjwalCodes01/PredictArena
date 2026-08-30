@@ -15,13 +15,11 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAccount, useWalletClient } from "wagmi";
-import { createDexClient, mintCollateral, DexError } from "@predictarena/dex";
-import { RPC_URL } from "@/lib/wagmi";
+import { mintCollateral, DexError } from "@predictarena/dex";
+import { getWalletDexClient } from "@/lib/dexClient";
 import { amount as fmt } from "@/lib/format";
 import { Button } from "./ui";
 
-const INDEXER_URL =
-  process.env["NEXT_PUBLIC_INDEXER_URL"] ?? "https://dev.smk.somnia.host/v1/graphql";
 
 /** Enough for a hundred one-tUSDC calls; not so much the faucet balks. */
 const MINT_WHOLE = 100n;
@@ -41,12 +39,7 @@ export function GetFundsButton({ compact = false }: { compact?: boolean }) {
     setError(null);
     setDone(null);
     try {
-      const dex = createDexClient({
-        indexerUrl: INDEXER_URL,
-        rpcHttpUrl: RPC_URL,
-        walletClient,
-        account: address,
-      });
+      const dex = getWalletDexClient(walletClient, address);
       const { minted } = await mintCollateral(dex, MINT_WHOLE);
       setDone(minted);
       // The balance strip and the stake presets both read this.

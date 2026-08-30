@@ -18,14 +18,12 @@
 import { useCallback, useRef, useState } from "react";
 import { useAccount, useWalletClient } from "wagmi";
 import {
-  createDexClient, prepareCall, getWindows, idempotencyKey, DexError,
+  prepareCall, getWindows, idempotencyKey, DexError,
   type Direction, type Window as DexWindow,
 } from "@predictarena/dex";
+import { getWalletDexClient } from "@/lib/dexClient";
 import { addPending } from "@/lib/pending";
-import { RPC_URL } from "@/lib/wagmi";
 
-const INDEXER_URL =
-  process.env["NEXT_PUBLIC_INDEXER_URL"] ?? "https://dev.smk.somnia.host/v1/graphql";
 
 export type CallPhase =
   | { kind: "idle" }
@@ -70,12 +68,7 @@ export function usePlaceCall() {
       setPhase({ kind: "preparing" });
 
       try {
-        const dex = createDexClient({
-          indexerUrl: INDEXER_URL,
-          rpcHttpUrl: RPC_URL,
-          walletClient,
-          account: address,
-        });
+        const dex = getWalletDexClient(walletClient, address);
 
         // Re-read the window at click time. It may have locked while the user
         // was deciding, and placing into a locked window wastes their gas.

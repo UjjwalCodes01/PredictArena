@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getTopOfBook, DexError } from "@predictarena/dex";
 import { serverDex } from "@/lib/server";
+import { rateLimit, clientKey, tooManyRequests } from "@/lib/rateLimit";
 import { cached } from "@/lib/cache";
 import { windowsFor } from "@/lib/windows";
 
@@ -14,6 +15,9 @@ export const dynamic = "force-dynamic";
  * another reads as a glitch even when both are correct.
  */
 export async function GET(request: Request): Promise<NextResponse> {
+  const limit = rateLimit(clientKey(request), { capacity: 40, refillPerSec: 2 });
+  if (!limit.ok) return tooManyRequests(limit) as never;
+
   const { searchParams } = new URL(request.url);
   const asset = (searchParams.get("asset") ?? "BTC").toUpperCase();
   const marketId = searchParams.get("marketId");

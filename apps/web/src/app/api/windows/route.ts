@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getTopOfBook, DexError } from "@predictarena/dex";
 import { serverDex } from "@/lib/server";
+import { rateLimit, clientKey, tooManyRequests } from "@/lib/rateLimit";
 import { cached } from "@/lib/cache";
 import { windowsFor } from "@/lib/windows";
 import type { WindowsResponse, WindowDto } from "@/lib/types";
@@ -18,6 +19,9 @@ export const revalidate = 0;
  * still trading (AGENTS.md, timing edge cases).
  */
 export async function GET(request: Request): Promise<NextResponse> {
+  const limit = rateLimit(clientKey(request), { capacity: 40, refillPerSec: 2 });
+  if (!limit.ok) return tooManyRequests(limit) as never;
+
   const { searchParams } = new URL(request.url);
   const asset = searchParams.get("asset") ?? undefined;
   const intervalSec = searchParams.get("intervalSec");

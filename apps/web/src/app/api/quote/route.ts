@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getWindow, quoteCall, DexError } from "@predictarena/dex";
 import { serverDex } from "@/lib/server";
+import { rateLimit, clientKey, tooManyRequests } from "@/lib/rateLimit";
 import type { QuoteDto } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +15,9 @@ export const dynamic = "force-dynamic";
  * exists after the fill.
  */
 export async function GET(request: Request): Promise<NextResponse> {
+  const limit = rateLimit(clientKey(request), { capacity: 15, refillPerSec: 1 });
+  if (!limit.ok) return tooManyRequests(limit) as never;
+
   const { searchParams } = new URL(request.url);
   const marketId = searchParams.get("marketId");
   const direction = searchParams.get("direction");

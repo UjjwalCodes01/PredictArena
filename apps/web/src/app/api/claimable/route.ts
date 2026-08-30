@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { serverDex } from "@/lib/server";
+import { rateLimit, clientKey, tooManyRequests } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,9 @@ const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
  * between a game that pays and one that quietly does not.
  */
 export async function GET(request: Request): Promise<NextResponse> {
+  const limit = rateLimit(clientKey(request), { capacity: 20, refillPerSec: 1 });
+  if (!limit.ok) return tooManyRequests(limit) as never;
+
   const { searchParams } = new URL(request.url);
   const wallet = searchParams.get("wallet");
 

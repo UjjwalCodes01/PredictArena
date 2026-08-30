@@ -1,3 +1,10 @@
 packages:
   - "packages/*"
   - "apps/*"
+
+# drizzle-kit bundles the deprecated @esbuild-kit/* chain, which pins esbuild
+# 0.18. Advisory GHSA-67mh-4wv8-2f99 lets any website send requests to a running
+# esbuild dev server. It is dev-only tooling and never ships, but this is a
+# one-line fix rather than an accepted risk.
+overrides:
+  esbuild: ">=0.25.0"

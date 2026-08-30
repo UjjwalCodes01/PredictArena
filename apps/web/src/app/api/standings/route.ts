@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getStandings, currentWeekId, weekStartUtc, getDisplayNames } from "@predictarena/db";
 import { serverDb, dbRead } from "@/lib/server";
+import { rateLimit, clientKey, tooManyRequests } from "@/lib/rateLimit";
 import { cached } from "@/lib/cache";
 import type { StandingsResponse } from "@/lib/types";
 
@@ -17,6 +18,9 @@ const WEEK_ID = /^\d{4}-W\d{2}$/;
  * data, so a late correction is a recompute rather than a repair.
  */
 export async function GET(request: Request): Promise<NextResponse> {
+  const limit = rateLimit(clientKey(request), { capacity: 40, refillPerSec: 2 });
+  if (!limit.ok) return tooManyRequests(limit) as never;
+
   const { searchParams } = new URL(request.url);
   const requested = searchParams.get("week");
 

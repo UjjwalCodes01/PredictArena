@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useState, type ReactNode } from "react";
 import { wagmiConfig } from "@/lib/wagmi";
 import { clearPending } from "@/lib/pending";
+import { releaseWalletDexClient } from "@/lib/dexClient";
 
 export function Providers({ children }: { children: ReactNode }) {
   // Created once per mount, not per render, so the cache is not thrown away.
@@ -44,6 +45,9 @@ function SessionReset() {
   const { address } = useAccount();
   useEffect(() => {
     clearPending();
+    // The signing client is bound to an account; drop it so the next account
+    // does not inherit the previous one's connections.
+    releaseWalletDexClient();
   }, [address]);
   return null;
 }

@@ -30,6 +30,40 @@ to install from the workspace root. `apps/web/vercel.json` does that.
 
 3. **Deploy.** Then open `/start` on a phone and walk the four steps.
 
+## Keeping the projection fresh
+
+**Symptom if you skip this:** calls settle on-chain, the leaderboard never moves, and a player who
+just placed a call sees "no calls yet". Nothing errors — it is silently, completely stale. The app
+now says so ("RESULTS DELAYED") rather than pretending the wallet has no history, but the fix is to
+keep ingestion running.
+
+Two ways, in order of preference:
+
+**1. Run the daemon** (best). It tails live chain events and reacts in seconds. Needs a host that
+keeps a process alive — Railway, Fly, or any small VPS.
+
+> **A gap is not fully recoverable.** The catch-up sweep can re-scan a window it saw while that
+> window was live, because the pool address was stored then. It cannot recover a window whose
+> entire life passed with nothing watching: the venue lists live markets only (`includeInactive`
+> returns the same rows), so there is nothing left to enumerate. Those calls stay invisible to the
+> leaderboard permanently, even though they are perfectly safe on-chain. A brief outage is
+> survivable; an outage of hours costs you every call placed during it.
+
+**2. Drive it from a scheduler** (works on Vercel alone). `GET /api/cron/ingest` runs one full
+cycle: ingest windows, ingest calls, catch up closed windows, reconcile settlements. Set
+`CRON_SECRET` in the environment and it is reachable as:
+
+```
+curl "https://<your-app>/api/cron/ingest?key=$CRON_SECRET"
+```
+
+`vercel.json` already schedules it every 5 minutes. Vercel Cron sends the secret as a bearer token
+automatically. On a plan where fine-grained crons are unavailable, point any external scheduler
+(GitHub Actions `schedule`, cron-job.org) at the same URL.
+
+Without `CRON_SECRET` the endpoint returns 503 and does nothing — it is not a public trigger for
+unbounded chain work.
+
 ## The indexer is a separate process
 
 Vercel runs functions, not daemons — the indexer must live somewhere that stays running (Railway,

@@ -16,7 +16,10 @@ import type { CallDto } from "@/lib/types";
 import { amount, timeAgo } from "@/lib/format";
 import { Card, Empty, ErrorNote, Skeleton, StatusPill, LiveDot } from "./ui";
 
-async function fetchCalls(wallet: string): Promise<{ calls: CallDto[] }> {
+/** Older than this and the projection is behind, not merely quiet. */
+const INDEXER_STALE_SEC = 180;
+
+async function fetchCalls(wallet: string): Promise<{ calls: CallDto[]; indexerAgeSec: number | null }> {
   const r = await fetch(`/api/positions?wallet=${wallet}`, { cache: "no-store" });
   if (!r.ok) {
     const body = await r.json().catch(() => ({}));
@@ -52,12 +55,19 @@ export function MyCalls({ refreshKey }: { refreshKey: number }) {
   if (!isConnected) return null;
 
   const hasAnything = pending.length > 0 || (data?.calls.length ?? 0) > 0;
+  // A stopped indexer and an empty history look identical from here. Say which.
+  const indexerStale =
+    data?.indexerAgeSec != null && data.indexerAgeSec > INDEXER_STALE_SEC;
 
   return (
     <section aria-label="Your calls" className="mt-8 lg:mt-0">
       <div className="mb-2 flex items-center justify-between gap-3">
         <h2 className="label">YOUR CALLS</h2>
-        {stream === "live" ? (
+        {indexerStale ? (
+          <span className="label text-warn" title="The indexer has not reported in over three minutes.">
+            RESULTS DELAYED
+          </span>
+        ) : stream === "live" ? (
           <LiveDot label="LIVE" />
         ) : stream === "fallback" ? (
           <span className="label" title="The live channel is unavailable; updates arrive on a timer.">
@@ -88,9 +98,13 @@ export function MyCalls({ refreshKey }: { refreshKey: number }) {
       ) : !hasAnything ? (
         <Card>
           <Empty
-            title="No calls yet"
+            title={indexerStale ? "Results are delayed" : "No calls yet"}
             image="/img/workspace-person.jpg"
-            hint="Place your first call above. It will appear here the moment the chain confirms it."
+            hint={
+              indexerStale
+                ? "Your calls are safe on-chain. The service that reads them is behind, so this list and the leaderboard may be out of date."
+                : "Place your first call above. It will appear here the moment the chain confirms it."
+            }
           />
         </Card>
       ) : (

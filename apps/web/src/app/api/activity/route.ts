@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getRecentCalls, getLeagueTotals, currentWeekId, getDisplayNames } from "@predictarena/db";
 import { serverDb, dbRead } from "@/lib/server";
+import { rateLimit, clientKey, tooManyRequests } from "@/lib/rateLimit";
 import { cached } from "@/lib/cache";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +13,9 @@ export const dynamic = "force-dynamic";
  * not a disclosure.
  */
 export async function GET(request: Request): Promise<NextResponse> {
+  const limit = rateLimit(clientKey(request), { capacity: 40, refillPerSec: 2 });
+  if (!limit.ok) return tooManyRequests(limit) as never;
+
   const { searchParams } = new URL(request.url);
   const settledOnly = searchParams.get("settled") === "1";
 

@@ -7,7 +7,7 @@
  * chosen asset. A grid of every open window is more information than a decision
  * needs, and the whole point of the product is a one-tap call.
  */
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { WindowsResponse, WindowDto } from "@/lib/types";
 import { countdown, seriesLabel } from "@/lib/format";
@@ -41,15 +41,27 @@ export function WindowFeed({ onPlaced }: { onPlaced: () => void }) {
   const now = useServerClock(data?.serverNowSec);
   useTick(Boolean(data));
 
+  // The window currently on screen. Held in state, not recomputed per refetch.
+  //
+  // Recomputing it every ten seconds made the display jump between series --
+  // observed live going 2:39 -> 12:37 -> 9:20 -> 0:34 as the preferred 5-minute
+  // series rolled in and out of the tradable set. To someone mid-decision the
+  // market simply changed underneath them, which reads as the page breaking.
+  const [pinnedId, setPinnedId] = useState<string | null>(null);
+
   const { chosen, next } = useMemo((): { chosen?: WindowDto; next?: WindowDto } => {
     if (!data) return {};
     const tradable = data.windows.filter((w) => w.isTradable);
+
+    // Stay on the pinned window while it is still tradable.
+    const pinned = pinnedId ? tradable.find((w) => w.marketId === pinnedId) : undefined;
+
     // Prefer the demo-friendly series, but never show nothing just because that
     // series happens to be mid-roll.
     const preferred = tradable.filter((w) => w.intervalSec === PREFERRED_INTERVAL);
     const pool = preferred.length > 0 ? preferred : tradable;
     const sorted = [...pool].sort((a, b) => a.closesAtSec - b.closesAtSec);
-    const current = sorted[0];
+    const current = pinned ?? sorted[0];
     // The next window is the next one to CLOSE LATER -- not simply the second
     // in the list. The venue runs several windows of a series concurrently, so
     // sorted[1] is often a parallel window closing at the same moment, and
@@ -59,7 +71,19 @@ export function WindowFeed({ onPlaced }: { onPlaced: () => void }) {
       ? sorted.find((w) => w.closesAtSec > current.closesAtSec)
       : undefined;
     return { chosen: current, next: following };
-  }, [data]);
+  }, [data, pinnedId]);
+
+  // Pin whatever is being shown, and release the pin only when that window is
+  // no longer tradable — at which point the next refetch picks a fresh one.
+  useEffect(() => {
+    if (chosen && chosen.marketId !== pinnedId) setPinnedId(chosen.marketId);
+  }, [chosen, pinnedId]);
+
+  useEffect(() => {
+    if (!data || !pinnedId) return;
+    const stillOpen = data.windows.some((w) => w.marketId === pinnedId && w.isTradable);
+    if (!stillOpen) setPinnedId(null);
+  }, [data, pinnedId]);
 
   const secondsLeft = chosen ? chosen.closesAtSec - now() / 1000 : 0;
   const handlePlaced = useCallback(() => { onPlaced(); void refetch(); }, [onPlaced, refetch]);
@@ -80,7 +104,7 @@ export function WindowFeed({ onPlaced }: { onPlaced: () => void }) {
         {ASSETS.map((a) => (
           <button
             key={a}
-            onClick={() => setAsset(a)}
+            onClick={() => { setAsset(a); setPinnedId(null); }}
             aria-pressed={asset === a}
             className={`rounded-sm px-3 py-1.5 font-[family-name:var(--font-mono)] text-xs uppercase tracking-wider transition-colors ${
               asset === a ? "bg-accent text-accent-ink" : "text-ink-soft hover:text-ink"

@@ -226,6 +226,16 @@ export async function ingestCalls(
  * was stored at ingest time, and re-scans their fills. Ingestion is idempotent
  * (calls are keyed on the fill), so re-scanning a window we already have is
  * harmless and cheap.
+ *
+ * KNOWN LIMIT, measured rather than assumed: this can only recover a window we
+ * saw while it was live. The venue lists live markets only -- `includeInactive`
+ * returns the same 14 rows -- so a window whose ENTIRE life passed with the
+ * indexer down leaves no trace we can find by listing, and the calls placed on
+ * it are invisible to the projection for good. Recovering those would mean
+ * scanning chain logs by block range, which is a different and much larger job.
+ *
+ * The practical consequence: the indexer going down briefly is survivable, and
+ * the indexer being down for hours is not. Keep it running.
  */
 export async function catchUpClosedWindows(
   dex: DexClient,
