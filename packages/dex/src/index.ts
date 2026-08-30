@@ -38,7 +38,7 @@ export { ServerClock, type ClockSource } from "./time";
 export { getMarkets, invalidateMarkets, type MarketsInfo, type VenueInfo } from "./markets";
 
 export {
-  getWindows, getCurrentWindow, headroomSecFor, MarketStatus,
+  getWindows, getWindow, getCurrentWindow, headroomSecFor, MarketStatus,
   outcomeIndexFor, directionFor,
   type Window, type Direction, type GetWindowsOptions,
 } from "./windows";

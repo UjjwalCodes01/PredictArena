@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
-import { getWindows, getTopOfBook, DexError } from "@predictarena/dex";
+import { getTopOfBook, DexError } from "@predictarena/dex";
 import { serverDex } from "@/lib/server";
+import { cached } from "@/lib/cache";
+import { windowsFor } from "@/lib/windows";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +22,8 @@ export async function GET(request: Request): Promise<NextResponse> {
     const dex = serverDex();
     const client = dex.exchange.client;
 
-    const windows = await getWindows(dex, { asset, includeUntradable: true, limit: 30 });
+    // Same key the feed uses, so the two pages warm each other.
+    const windows = await windowsFor(dex, { asset });
     const tradable = windows.filter((w) => w.isTradable);
     const chosen =
       (marketId ? windows.find((w) => w.marketId === marketId) : undefined) ??
@@ -29,8 +32,11 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     // Underlying price: the real-world signal the window resolves against.
     const [live, history] = await Promise.all([
-      client.fetchPrice(asset).catch(() => null),
-      client.fetchPriceHistory(asset, { limit: 90 }).catch(() => [] as unknown[]),
+      cached(`price:${asset}`, 2_500, () => client.fetchPrice(asset)).catch(() => null),
+      // History moves once a minute; there is no reason to refetch it every 5s.
+      cached(`hist:${asset}`, 20_000, () => client.fetchPriceHistory(asset, { limit: 90 })).catch(
+        () => [] as unknown[],
+      ),
     ]);
 
     let book = { yesBids: [], yesAsks: [], noBids: [], noAsks: [] } as {
@@ -44,9 +50,9 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     if (chosen) {
       const [b, t, fills] = await Promise.all([
-        client.getBinaryOrderBook(chosen.pool, { depth: 8 }).catch(() => book),
-        getTopOfBook(dex, chosen.pool).catch(() => top),
-        client.getFills(chosen.pool, { limit: 120 }).catch(() => []),
+        cached(`book:${chosen.pool}`, 2_500, () => client.getBinaryOrderBook(chosen.pool, { depth: 8 })).catch(() => book),
+        cached(`top:${chosen.pool}`, 2_500, () => getTopOfBook(dex, chosen.pool)).catch(() => top),
+        cached(`fills:${chosen.pool}`, 5_000, () => client.getFills(chosen.pool, { limit: 120 })).catch(() => []),
       ]);
       book = b;
       top = t;

@@ -40,7 +40,11 @@ export class RequestQueue {
   private readonly pending: Array<() => void> = [];
 
   constructor(opts: QueueOptions = {}) {
-    this.concurrency = Math.max(1, opts.concurrency ?? 4);
+    // Default 16, not 4. Measured against Shannon: one getMarketOnchain takes
+    // ~1.86s and SIXTEEN in parallel take ~1.28s -- the cost is round-trip
+    // latency, not throughput. A ceiling of 4 turned a 14-window page into
+    // four sequential rounds and ~5s of waiting for no gain.
+    this.concurrency = Math.max(1, opts.concurrency ?? 16);
     this.maxAttempts = Math.max(1, opts.maxAttempts ?? 3);
     this.baseDelayMs = opts.baseDelayMs ?? 250;
     this.maxDelayMs = opts.maxDelayMs ?? 8_000;

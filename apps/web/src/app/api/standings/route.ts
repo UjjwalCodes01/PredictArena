@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getStandings, currentWeekId, weekStartUtc, getDisplayNames } from "@predictarena/db";
 import { serverDb } from "@/lib/server";
+import { cached } from "@/lib/cache";
 import type { StandingsResponse } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -29,9 +30,13 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   try {
     const db = serverDb();
-    const standings = await getStandings(db, weekId);
-    // One lookup for the whole page rather than a query per row.
-    const names = await getDisplayNames(db, standings.map((s) => s.wallet));
+    // 6s. Standings only move when a call settles, and the database is a
+    // serverless instance an ocean away -- the first request after it suspends
+    // paid seventeen seconds. Exactly one visitor should ever pay that.
+    const standings = await cached(`standings:${weekId}`, 6_000, () => getStandings(db, weekId));
+    const names = await cached(`names:${weekId}`, 6_000, () =>
+      getDisplayNames(db, standings.map((s) => s.wallet)),
+    );
     const body: StandingsResponse = {
       weekId,
       weekStartIso: weekStartUtc(weekId).toISOString(),

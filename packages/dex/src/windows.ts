@@ -157,6 +157,48 @@ export async function getWindows(client: DexClient, opts: GetWindowsOptions = {}
   return windows;
 }
 
+/**
+ * One window by id.
+ *
+ * `/api/quote` used to call `getWindows({ limit: 60 })` and then find its
+ * market in the result -- sixty chain reads to price one call. This reads the
+ * single row and the single on-chain status instead.
+ */
+export async function getWindow(client: DexClient, marketId: `0x${string}`): Promise<Window | null> {
+  await client.clock.ensureFresh();
+  try {
+    const [raw, onchain] = await Promise.all([
+      client.queue.run(() => client.exchange.client.getBinaryMarket(marketId)),
+      client.queue.run(() => client.exchange.client.getMarketOnchain(marketId)),
+    ]);
+    if (!raw) return null;
+
+    const closesAtSec = Number(raw.expiry);
+    const secondsLeft = client.clock.secondsUntil(closesAtSec);
+    const intervalSec = raw.intervalSec != null ? Number(raw.intervalSec) : null;
+
+    return {
+      marketId: raw.marketId,
+      asset: raw.asset,
+      pool: onchain.pool,
+      venueId: raw.venueId ?? null,
+      question: raw.question,
+      strike: raw.strike,
+      intervalSec,
+      opensAtSec: Number(raw.tradingStart),
+      closesAtSec,
+      secondsLeft,
+      status: onchain.status,
+      isTradable:
+        onchain.status === MarketStatus.Trading && secondsLeft >= headroomSecFor(intervalSec ?? 0),
+      onchain,
+      raw,
+    };
+  } catch (e) {
+    throw asDexError(e, "API_DOWN");
+  }
+}
+
 /** The single best window to act on now: soonest to settle that is still tradable. */
 export async function getCurrentWindow(
   client: DexClient,

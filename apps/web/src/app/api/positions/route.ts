@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getWalletCalls, normalizeAddress } from "@predictarena/db";
 import { serverDb } from "@/lib/server";
+import { cached } from "@/lib/cache";
 import type { CallDto } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +29,8 @@ export async function GET(request: Request): Promise<NextResponse> {
   try {
     const db = serverDb();
     // Addresses are stored lowercase; wagmi hands back checksum casing.
-    const rows = await getWalletCalls(db, normalizeAddress(wallet), 50);
+    const key = normalizeAddress(wallet);
+    const rows = await cached(`calls:${key}`, 5_000, () => getWalletCalls(db, key, 50));
 
     const calls: CallDto[] = rows.map((r) => ({
       id: r.id,

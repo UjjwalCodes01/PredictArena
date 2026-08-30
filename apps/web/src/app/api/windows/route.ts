@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
-import { getWindows, getTopOfBook, DexError } from "@predictarena/dex";
+import { getTopOfBook, DexError } from "@predictarena/dex";
 import { serverDex } from "@/lib/server";
+import { cached } from "@/lib/cache";
+import { windowsFor } from "@/lib/windows";
 import type { WindowsResponse, WindowDto } from "@/lib/types";
 
 /** Live data: never cache. A stale window is a window a user cannot trade. */
@@ -22,11 +24,13 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   try {
     const dex = serverDex();
-    const windows = await getWindows(dex, {
-      ...(asset ? { asset } : {}),
-      ...(intervalSec ? { intervalSec: Number(intervalSec) } : {}),
-      limit: 40,
+    const all = await windowsFor(dex, {
+      asset,
+      intervalSec: intervalSec ? Number(intervalSec) : undefined,
     });
+    // The shared cache holds untradable windows too, because the terminal wants
+    // them; the feed does not.
+    const windows = all.filter((w) => w.isTradable);
 
     // Price both sides per window, concurrently. A window with no asks is still
     // shown -- it just cannot be called yet, and saying so is better than
@@ -36,7 +40,7 @@ export async function GET(request: Request): Promise<NextResponse> {
         let up: bigint | null = null;
         let down: bigint | null = null;
         try {
-          const top = await getTopOfBook(dex, w.pool);
+          const top = await cached(`top:${w.pool}`, 2_500, () => getTopOfBook(dex, w.pool));
           up = top.up;
           down = top.down;
         } catch {
