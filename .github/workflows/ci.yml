@@ -19,13 +19,14 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
+      # No `version` here on purpose: it comes from `packageManager` in
+      # package.json, so CI and local development cannot drift apart. The old
+      # pin said 10 while the repo was developed on 11.
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: pnpm

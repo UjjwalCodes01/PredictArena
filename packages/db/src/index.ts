@@ -15,7 +15,7 @@ export {
 export {
   upsertWindow, upsertCall, markWindowSettled, settleCallsForWindow, getNonTerminalCalls, getOverdueCalls,
   getOpenWindows, touchWallet, getSyncState, setSyncState, getScorableCalls,
-  getStandings, getWalletCalls, getWindowsByIds, TERMINAL_STATUSES,
+  getStandings, getWalletCalls, getWindowsByIds, normalizeAddress, TERMINAL_STATUSES,
 } from "./queries.js";
 
 export { computeStandings, streakMultiplierX10, pointsForWin } from "./scoring.js";

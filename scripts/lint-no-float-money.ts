@@ -41,10 +41,17 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-/** Does this file participate in money handling? */
+/**
+ * Does this file participate in money handling?
+ *
+ * Both packages hold amounts: `dex` in bigint, `db` in numeric columns that
+ * must never be read through a float. Anything importing either is downstream
+ * of an amount and is scanned too.
+ */
 function isMoneyFile(path: string, source: string): boolean {
   if (path.includes(`${"packages"}/dex/src`)) return true;
-  return /from\s+["']@predictarena\/dex["']/.test(source);
+  if (path.includes(`${"packages"}/db/src`)) return true;
+  return /from\s+["']@predictarena\/(dex|db)["']/.test(source);
 }
 
 function stripCommentsAndStrings(line: string): string {

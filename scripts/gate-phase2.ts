@@ -45,22 +45,53 @@ async function main(): Promise<void> {
       WHERE c.status = 'PENDING' AND w.closes_at < now()`) as unknown as OverdueRow[];
 
     kv("overdue PENDING calls", String(before.length));
+
+    // A gate that only fires when the indexer happens to be behind is a gate
+    // that proves nothing on a healthy system. So if nothing is naturally
+    // overdue, STAGE the condition: take calls that already settled, forget
+    // their outcome, and require reconciliation to re-derive it from chain.
+    //
+    // That is a stronger claim than the original, not a weaker one. It proves
+    // the outcome is READ from the chain rather than remembered -- if the
+    // recovered status differs from what was there before, the projection was
+    // not re-derivable and the whole "DB is a projection" design is false.
+    let staged: Array<{ id: string; status: string }> = [];
+    let overdue = before;
+
     if (before.length === 0) {
-      push({
-        name: "Overdue calls exist to recover",
-        status: "skip",
-        code: "NOTHING_OVERDUE",
-        detail: "No call is currently past its window close.",
-        action: "Run `pnpm indexer` for a minute to accumulate some, then retry.",
-      });
-      summarise(results, "Phase 2 gate -- summary");
-      process.exit(0);
+      staged = (await sql`
+        SELECT c.id, c.status
+        FROM calls c JOIN windows w ON w.id = c.window_id
+        WHERE c.status IN ('WON','LOST','VOID') AND w.closes_at < now()
+        ORDER BY c.settled_at DESC NULLS LAST
+        LIMIT 10`) as unknown as Array<{ id: string; status: string }>;
+
+      if (staged.length === 0) {
+        push({ name: "A recoverable call exists", status: "skip", code: "NO_DATA",
+          detail: "No settled calls to re-derive and none overdue.",
+          action: "Run `pnpm indexer` for a minute, then retry." });
+        summarise(results, "Phase 2 gate -- summary");
+        process.exit(0);
+      }
+
+      const ids = staged.map((r) => r.id);
+      await sql`UPDATE calls SET status = 'PENDING', settled_at = NULL WHERE id = ANY(${ids})`;
+      kv("staged", `${staged.length} settled call(s) reset to PENDING`);
+      console.log(dim("    (their outcomes must now be re-derived from chain, not remembered)"));
+
+      overdue = (await sql`
+        SELECT c.id, c.window_id, c.direction
+        FROM calls c JOIN windows w ON w.id = c.window_id
+        WHERE c.status = 'PENDING' AND w.closes_at < now()`) as unknown as OverdueRow[];
     }
+
     push({
-      name: "Overdue calls exist to recover",
+      name: "Recoverable calls exist",
       status: "pass",
       code: "OK",
-      detail: `${before.length} call(s) are past their window close and still PENDING`,
+      detail: staged.length > 0
+        ? `${overdue.length} call(s) staged by forgetting a known outcome`
+        : `${overdue.length} call(s) are naturally past their window close`,
     });
 
     heading("2. Cold reconciliation (what a restart runs)");
@@ -71,7 +102,7 @@ async function main(): Promise<void> {
     kv("errors", String(result.errors));
 
     heading("3. After");
-    const ids = before.map((r) => r.id);
+    const ids = overdue.map((r) => r.id);
     const after = (await sql`
       SELECT id, status FROM calls WHERE id = ANY(${ids})`) as unknown as Array<{ id: string; status: string }>;
 
@@ -85,9 +116,22 @@ async function main(): Promise<void> {
       return stillPending.length === 0
         ? { status: "pass", code: "OK", detail: `${settled.length} recovered from chain (${summary})` }
         : { status: "fail", code: "NOT_RECOVERED",
-            detail: `${stillPending.length} of ${before.length} still PENDING (${summary}).`,
+            detail: `${stillPending.length} of ${overdue.length} still PENDING (${summary}).`,
             action: "Reconciliation did not recover them; the guarantee is broken." };
     }));
+
+    if (staged.length > 0) {
+      push(await check("Re-derived outcomes MATCH what was forgotten", async () => {
+        const expected = new Map(staged.map((r) => [r.id, r.status]));
+        const wrong = after.filter((r) => expected.has(r.id) && expected.get(r.id) !== r.status);
+        return wrong.length === 0
+          ? { status: "pass", code: "OK",
+              detail: `All ${staged.length} recovered to their original status — the projection is re-derivable from chain.` }
+          : { status: "fail", code: "DIVERGED",
+              detail: wrong.map((w) => `${w.id.slice(0, 14)}: was ${expected.get(w.id)}, now ${w.status}`).join("; "),
+              action: "Reconciliation produced a DIFFERENT outcome than the chain gave before. Investigate immediately." };
+      }));
+    }
 
     push(await check("No outcome was guessed -- statuses are legal", async () => {
       const legal = new Set(["WON", "LOST", "VOID", "FAILED", "PENDING"]);

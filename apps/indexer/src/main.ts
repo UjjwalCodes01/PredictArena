@@ -22,6 +22,7 @@ import { log } from "./log.js";
 import { ingestWindows } from "./ingest.js";
 import { ingestCalls } from "./ingest-calls.js";
 import { reconcile } from "./reconcile.js";
+import { startLiveTail } from "./live.js";
 
 // One .env at the repo root; this app lives two levels down.
 loadDotenv({ path: resolve(import.meta.dirname, "..", "..", "..", ".env"), quiet: true });
@@ -29,6 +30,8 @@ loadDotenv({ path: resolve(import.meta.dirname, "..", "..", "..", ".env"), quiet
 const INGEST_MS = Number(process.env["INGEST_INTERVAL_MS"] ?? 20_000);
 const RECONCILE_MS = Number(process.env["RECONCILE_INTERVAL_MS"] ?? 45_000);
 const ASSETS = (process.env["INDEX_ASSETS"] ?? "BTC,ETH").split(",").map((a) => a.trim()).filter(Boolean);
+/** The tail is an optimisation; turning it off must never break correctness. */
+const LIVE_TAIL = process.env["LIVE_TAIL"] !== "0";
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -76,16 +79,40 @@ async function main(): Promise<void> {
   const startup = await reconcile(dex, db, "all");
   log.info({ ...startup }, "startup reconciliation complete");
 
+  // The live tail only ever ASKS for an early reconcile; it never writes. If it
+  // never connects, everything below still works on the 45s timer.
+  let tail: ReturnType<typeof startLiveTail> | null = null;
+  let reconcileInFlight = false;
+  const nudgeReconcile = (reason: string): void => {
+    if (stopped || reconcileInFlight) return;
+    reconcileInFlight = true;
+    void reconcile(dex, db, "overdue")
+      .then((r) => {
+        if (r.callsSettled > 0) log.info({ ...r, reason }, "early reconcile from live tail");
+      })
+      .catch((e: unknown) => log.warn({ reason, err: e instanceof Error ? e.message : String(e) }, "early reconcile failed"))
+      .finally(() => { reconcileInFlight = false; });
+  };
+
   let stopped = false;
   const stop = (signal: string): void => {
     if (stopped) return;
     stopped = true;
     log.info({ signal }, "shutting down");
+    tail?.stop();
     // No draining needed: every write is an idempotent upsert, so whatever was
     // in flight is simply redone on the next start.
     dex.close();
     setTimeout(() => process.exit(0), 200);
   };
+  tail = LIVE_TAIL
+    ? startLiveTail(dex, {
+        onChange: () => nudgeReconcile("live-change"),
+        onReconnect: () => nudgeReconcile("reconnect-gap"),
+      })
+    : null;
+  if (!LIVE_TAIL) log.info("live tail disabled (LIVE_TAIL=0); polling still guarantees correctness");
+
   process.on("SIGINT", () => stop("SIGINT"));
   process.on("SIGTERM", () => stop("SIGTERM"));
 

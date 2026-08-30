@@ -7,6 +7,7 @@
   "engines": {
     "node": ">=20"
   },
+  "packageManager": "pnpm@11.24.0",
   "scripts": {
     "wallets": "tsx scripts/gen-wallets.ts",
     "faucet": "tsx scripts/faucet.ts",

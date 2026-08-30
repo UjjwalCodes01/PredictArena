@@ -151,3 +151,64 @@ wrapper.
 Phase 4 must run the indexer as a direct `node`/`tsx` process under a supervisor that signals the
 real PID (systemd, a container entrypoint, Railway/Fly's own runner) -- not via a package-manager
 wrapper. Otherwise a "restarted" indexer can end up as two indexers.
+
+
+---
+
+## Phase 2 re-check
+
+A pass against PLAN.md's literal wording. Four more real gaps, all closed.
+
+### 1. The no-float CI rule did not cover the database 🔴
+
+The exit gate says *"no float anywhere near amounts (grep check in CI)"*. The linter only scanned
+files in `packages/dex` or importing it — so `packages/db`, which is where `stake`, `quantity` and
+`payout` actually live, **was never checked**. The rule existed and did not apply to the money.
+
+Scope widened to `packages/db` and anything importing either package: 25 files scanned before, 41
+now. Verified by planting both a `parseFloat` and a `Number(row.payout) * 1.0` in `packages/db` and
+watching each get caught.
+
+### 2. The WS subscription was missing entirely
+
+PLAN.md Phase 2 asks for "WS subscription → upsert settlements/windows" *alongside* the 45s poller.
+Only the poller existed.
+
+`apps/indexer/src/live.ts` now tails the venue and asks for an early reconcile when something moves.
+The division of labour is the part that matters and is easy to get backwards: **the tail never
+writes**. It only nudges the reconciler, so every failure mode degrades to "settlements land within
+45s instead of within seconds", never to "settlements are missed". A failed connect is a warning;
+reconnects back off 1s → 30s with full jitter; and a reconcile runs immediately after every
+reconnect, because the disconnected gap is exactly where an event hides.
+
+Measured: settlements now land seconds after resolution. Verified `LIVE_TAIL=0` still settles
+everything on the timer — correctness does not depend on the optimisation.
+
+### 3. Addresses were normalised on write but not on read 🔴
+
+Ingestion lowercased wallets (chain reads are lowercase); `getWalletCalls` compared raw. wagmi and
+viem return **EIP-55 checksum casing**, so Phase 3's profile page would have queried
+`0xAbC…` against a stored `0xabc…` and silently shown an empty history for every user. Both sides
+now go through `normalizeAddress`. Confirmed zero mixed-case or case-duplicated rows.
+
+### 4. `getWindows` never paginated
+
+AGENTS.md: *"always follow pagination; never assume one page."* It took a single page of 50. Six
+venues run their own series, so one page can hide a whole asset. Now paginated with a budget.
+
+### Fill aggregation is now tested
+
+The riskiest untested logic was the fill→call collapse: get it wrong and a player is charged three
+calls because their order swept three price levels, or a market-making bot lands on the leaderboard.
+Extracted as a pure function with 17 tests — multi-level sweeps, both directions in one transaction,
+SELLs skipped, makers skipped, exact bigints past `Number.MAX_SAFE_INTEGER`, address normalisation.
+
+## Deviation: no `payout_ratio` column
+
+PLAN.md's `windows` sketch lists `payout_ratio`. It does not exist on this venue: Event Contracts
+are a CLOB, so a winning contract redeems for exactly **1** unit of collateral and the *entry price*
+is whatever the book gave you. There is no per-window ratio to store.
+
+The equivalent is per-call, and it is already recorded: `stake / quantity` is the average price
+actually paid, which is the number a player cares about ("I paid 0.55 for something worth 1").
+Storing a window-level ratio would be inventing a figure the venue does not have.

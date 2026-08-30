@@ -136,11 +136,21 @@ export async function getOpenWindows(db: Database, limit = 200): Promise<WindowR
     .limit(limit);
 }
 
+/**
+ * Addresses are stored LOWERCASE, everywhere.
+ *
+ * Chain reads return them lowercase; wagmi and viem hand back EIP-55 checksum
+ * casing. Storing one and querying with the other silently matches nothing, so
+ * every address crossing this boundary is normalised. Display code re-applies
+ * checksum casing at the edge.
+ */
+export const normalizeAddress = (address: string): string => address.trim().toLowerCase();
+
 export async function touchWallet(db: Database, address: string): Promise<void> {
   const now = new Date();
   await db
     .insert(wallets)
-    .values({ address, firstSeenAt: now, lastSeenAt: now })
+    .values({ address: normalizeAddress(address), firstSeenAt: now, lastSeenAt: now })
     .onConflictDoUpdate({ target: wallets.address, set: { lastSeenAt: now } });
 }
 
@@ -208,7 +218,7 @@ export async function getWalletCalls(db: Database, wallet: string, limit = 100):
   return db
     .select()
     .from(calls)
-    .where(eq(calls.wallet, wallet))
+    .where(eq(calls.wallet, normalizeAddress(wallet)))
     .orderBy(desc(calls.placedAt))
     .limit(limit);
 }

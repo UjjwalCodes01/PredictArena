@@ -17,7 +17,7 @@
  *     orders. Counting makers would put bots on the league table.
  */
 import type { DexClient } from "@predictarena/dex";
-import { upsertCall, touchWallet, weekIdForClose, type Database, type NewCallRow } from "@predictarena/db";
+import { upsertCall, touchWallet, weekIdForClose, normalizeAddress, type Database, type NewCallRow } from "@predictarena/db";
 import type { CallStatus, Direction } from "@predictarena/db";
 import { log } from "./log.js";
 
@@ -49,7 +49,7 @@ async function fetchAllFills(dex: DexClient, pool: `0x${string}`) {
 }
 
 /** Only a BUY opens a position; a SELL is closing one, not making a call. */
-function directionOf(side: string | null): Direction | null {
+export function directionOf(side: string | null): Direction | null {
   if (side === "BUY_YES") return "UP";
   if (side === "BUY_NO") return "DOWN";
   return null;
@@ -66,13 +66,61 @@ export interface IngestTarget {
   winningOutcome: number;
 }
 
-interface Aggregated {
+export interface Aggregated {
   txHash: string;
   wallet: string;
   direction: Direction;
   quantity: bigint;
   stake: bigint;
   placedAtSec: number;
+}
+
+/** The fill fields aggregation depends on. Structural, so tests need no SDK. */
+export interface FillLike {
+  taker: string | null;
+  takerSide: string | null;
+  takerOrder?: { owner: string; side: string | null } | null;
+  quantity: string;
+  quoteQuantity: string;
+  timestamp: string;
+  txHash: string;
+}
+
+/**
+ * Collapse fills into one call per (transaction, direction).
+ *
+ * An order can sweep several price levels, producing several fills that share a
+ * transaction. Those are ONE call: the player tapped once. Amounts sum; the
+ * placement time is the earliest fill. Anything that is not a taker BUY is
+ * skipped -- a maker is a bot, and a SELL closes a position rather than making
+ * a call.
+ */
+export function aggregateFills(fills: readonly FillLike[], normalize: (a: string) => string): Map<string, Aggregated> {
+  const byCall = new Map<string, Aggregated>();
+  for (const f of fills) {
+    const taker = f.taker ?? f.takerOrder?.owner ?? null;
+    const direction = directionOf(f.takerSide ?? f.takerOrder?.side ?? null);
+    if (!taker || !direction || !f.txHash) continue;
+
+    const key = `${f.txHash}:${direction}`;
+    const placedAtSec = Number(f.timestamp);
+    const existing = byCall.get(key);
+    if (existing) {
+      existing.quantity += BigInt(f.quantity);
+      existing.stake += BigInt(f.quoteQuantity);
+      existing.placedAtSec = Math.min(existing.placedAtSec, placedAtSec);
+    } else {
+      byCall.set(key, {
+        txHash: f.txHash,
+        wallet: normalize(taker),
+        direction,
+        quantity: BigInt(f.quantity),
+        stake: BigInt(f.quoteQuantity),
+        placedAtSec,
+      });
+    }
+  }
+  return byCall;
 }
 
 export interface IngestCallsResult {
@@ -114,31 +162,7 @@ export async function ingestCalls(
     result.fillsSeen += fills.length;
     if (fills.length === 0) continue;
 
-    // Aggregate fills into one call per (transaction, direction).
-    const byCall = new Map<string, Aggregated>();
-    for (const f of fills) {
-      const taker = f.taker ?? f.takerOrder?.owner ?? null;
-      const direction = directionOf(f.takerSide ?? f.takerOrder?.side ?? null);
-      if (!taker || !direction || !f.txHash) continue;
-
-      const key = `${f.txHash}:${direction}`;
-      const placedAtSec = Number(f.timestamp);
-      const existing = byCall.get(key);
-      if (existing) {
-        existing.quantity += BigInt(f.quantity);
-        existing.stake += BigInt(f.quoteQuantity);
-        existing.placedAtSec = Math.min(existing.placedAtSec, placedAtSec);
-      } else {
-        byCall.set(key, {
-          txHash: f.txHash,
-          wallet: taker.toLowerCase(),
-          direction,
-          quantity: BigInt(f.quantity),
-          stake: BigInt(f.quoteQuantity),
-          placedAtSec,
-        });
-      }
-    }
+    const byCall = aggregateFills(fills as unknown as FillLike[], normalizeAddress);
     if (byCall.size === 0) continue;
 
     // The caller already read this window's on-chain state, so use it rather

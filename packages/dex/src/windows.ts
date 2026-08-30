@@ -47,6 +47,9 @@ export interface Window {
   readonly raw: BinaryMarket;
 }
 
+/** Page size for window listing. Pagination continues until a short page. */
+const WINDOW_PAGE = 50;
+
 /**
  * Minimum life an order needs, scaled to the series.
  *
@@ -77,17 +80,27 @@ export interface GetWindowsOptions {
 export async function getWindows(client: DexClient, opts: GetWindowsOptions = {}): Promise<Window[]> {
   await client.clock.ensureFresh();
 
-  let rows: BinaryMarket[];
+  // Follow pagination rather than assuming one page (AGENTS.md). `limit` is the
+  // caller's total budget; pages are fetched until it is met or the venue runs
+  // out. Six venues run their own series, so a single page can silently hide a
+  // whole asset's windows.
+  const budget = opts.limit ?? 50;
+  const rows: BinaryMarket[] = [];
   try {
-    rows = await client.queue.run(() =>
-      client.exchange.client.listLiveBinaryMarkets({
-        ...(opts.asset ? { asset: opts.asset.toUpperCase() } : {}),
-        ...(opts.intervalSec !== undefined ? { intervalSec: opts.intervalSec } : {}),
-        ...(opts.venueId ? { venueId: opts.venueId } : {}),
-        orderBy: "closingSoon",
-        limit: opts.limit ?? 50,
-      }),
-    );
+    for (let offset = 0; rows.length < budget; offset += WINDOW_PAGE) {
+      const page = await client.queue.run(() =>
+        client.exchange.client.listLiveBinaryMarkets({
+          ...(opts.asset ? { asset: opts.asset.toUpperCase() } : {}),
+          ...(opts.intervalSec !== undefined ? { intervalSec: opts.intervalSec } : {}),
+          ...(opts.venueId ? { venueId: opts.venueId } : {}),
+          orderBy: "closingSoon",
+          limit: Math.min(WINDOW_PAGE, budget - rows.length),
+          offset,
+        }),
+      );
+      rows.push(...page);
+      if (page.length < WINDOW_PAGE) break;
+    }
   } catch (e) {
     throw asDexError(e, "API_DOWN");
   }
