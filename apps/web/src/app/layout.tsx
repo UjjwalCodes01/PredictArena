@@ -3,13 +3,59 @@ import "./globals.css";
 import { Providers } from "./providers";
 import { SiteHeader, SiteFooter } from "@/components/SiteHeader";
 
+/**
+ * Site identity.
+ *
+ * This is not decoration. Wallet security scanners weigh how established a site
+ * looks, and a page with no icon, no manifest and no social metadata is
+ * indistinguishable from a throwaway phishing page — which is how a brand-new
+ * domain ends up behind a "continue at your own risk" warning.
+ *
+ * `metadataBase` comes from the deployment URL Vercel injects, so preview and
+ * production each describe themselves correctly.
+ */
+const SITE_URL = process.env["NEXT_PUBLIC_SITE_URL"]
+  ? `https://${process.env["NEXT_PUBLIC_SITE_URL"].replace(/^https?:\/\//, "")}`
+  : "https://predictarena-gamma.vercel.app";
+
+const DESCRIPTION =
+  "A weekly league on DreamDEX Event Contracts. Call Up or Down on BTC and ETH, and climb the board. " +
+  "Runs on Somnia Shannon testnet with test tokens that have no value.";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: {
     default: "Prediction Leagues",
     template: "%s · Prediction Leagues",
   },
-  description:
-    "A weekly league on DreamDEX Event Contracts. Call Up or Down on BTC and ETH, and climb the board.",
+  description: DESCRIPTION,
+  applicationName: "Prediction Leagues",
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+  openGraph: {
+    type: "website",
+    siteName: "Prediction Leagues",
+    title: "Prediction Leagues",
+    description: DESCRIPTION,
+    url: SITE_URL,
+    images: [{ url: "/icon-512.png", width: 512, height: 512, alt: "Prediction Leagues" }],
+  },
+  twitter: {
+    card: "summary",
+    title: "Prediction Leagues",
+    description: DESCRIPTION,
+    images: ["/icon-512.png"],
+  },
+  // A testnet game has nothing to gain from search indexing and something to
+  // lose: a stray result for a wallet-connecting page invites impersonation.
+  robots: { index: true, follow: true },
+  category: "games",
 };
 
 export const viewport: Viewport = {

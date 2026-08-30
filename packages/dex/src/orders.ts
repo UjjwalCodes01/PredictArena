@@ -17,8 +17,10 @@
  *     estimate and the confirmed cost only exists after the fill.
  */
 import { quoteBinaryStakeOverBook } from "@somnia-chain/markets-sdk";
-import type { BinaryBuySide, PlaceOrderResult, UnsignedOrder } from "@somnia-chain/markets-sdk";
-import { erc20Abi, keccak256, encodePacked } from "viem";
+import type {
+  BinaryBuySide, PlaceOrderResult, UnsignedOrder, UnsignedCall,
+} from "@somnia-chain/markets-sdk";
+import { erc20Abi, keccak256, encodePacked, encodeFunctionData } from "viem";
 import type { DexClient } from "./client";
 import { GAS_CEILING_WEI, LINKS, explorerTx } from "./config";
 import { DexError, asDexError } from "./errors";
@@ -306,6 +308,42 @@ export interface PreparedCall {
  * Build the transactions for CLIENT-SIDE signing without sending anything.
  * This is the path the web app uses: the server never holds a user key.
  */
+/**
+ * An ERC-20 approval for EXACTLY what this call needs.
+ *
+ * The SDK's own approval is for `maxUint256` -- an unlimited allowance. That is
+ * convenient (approve once, trade forever) and it is also the single clearest
+ * signature of a wallet drainer, which is why wallet security scanners flag any
+ * site that requests one. A brand-new domain asking for infinite spending
+ * authority is indistinguishable, to a scanner, from an actual attack.
+ *
+ * It is also simply worse for the user. An unlimited allowance means the pool
+ * can move every tUSDC the wallet will ever hold, forever, on the strength of
+ * one signature. Approving the escrow means the worst case is this one call.
+ *
+ * The cost is an approval per call rather than one ever. On a testnet game with
+ * one-tUSDC stakes that is a fair trade for not being flagged as a drainer.
+ */
+export function buildExactApproval(
+  client: DexClient,
+  spender: `0x${string}`,
+  amount: bigint,
+): UnsignedCall {
+  const symbol = client.collateral.symbol;
+  return {
+    to: client.collateral.address,
+    data: encodeFunctionData({
+      abi: erc20Abi,
+      functionName: "approve",
+      args: [spender, amount],
+    }),
+    value: 0n,
+    // The wallet shows this string on the confirmation, so it names the amount
+    // rather than saying "approve" and leaving the user to read hex.
+    description: `Approve ${formatFixed(amount, client.collateral.decimals, 4)} ${symbol} for this call`,
+  };
+}
+
 export async function prepareCall(client: DexClient, req: CallRequest): Promise<PreparedCall> {
   const quote = await quoteCall(client, req);
   if (!quote) {
@@ -339,10 +377,17 @@ export async function prepareCall(client: DexClient, req: CallRequest): Promise<
     }),
   );
 
+  // Replace the SDK's unlimited approval with one sized to this call. See
+  // buildExactApproval: an infinite allowance is what a drainer asks for, and
+  // wallet scanners treat it accordingly.
+  const approval: UnsignedCall | undefined = preflight.needsApproval
+    ? buildExactApproval(client, req.window.pool, quote.escrow)
+    : undefined;
+
   return {
     quote,
     preflight,
-    approval: unsigned.approval,
+    approval,
     order: unsigned.order,
     idempotencyKey: userData,
     expiresAtSec,

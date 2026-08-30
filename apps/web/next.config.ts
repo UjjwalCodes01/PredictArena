@@ -28,6 +28,9 @@ const config: NextConfig = {
     // Public by design: it identifies the app to WalletConnect, it authorises
     // nothing. Absent, the connector is not offered at all.
     NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: process.env["WALLETCONNECT_PROJECT_ID"] ?? "",
+    // Vercel injects VERCEL_URL per deployment; metadata uses it so preview and
+    // production each describe themselves rather than sharing one hard-coded host.
+    NEXT_PUBLIC_SITE_URL: process.env["SITE_URL"] ?? process.env["VERCEL_URL"] ?? "",
   },
 };
 
