@@ -4,6 +4,7 @@
  * Two loops, deliberately independent:
  *
  *   ingest      every 20s   mirror live windows into the projection
+ *   catch-up    every 2m    re-scan recently closed windows the venue dropped
  *   reconcile   every 45s   settle any call whose window has closed
  *
  * Reconciliation is the GUARANTEE (AGENTS.md section 5). A live feed is only
@@ -20,7 +21,7 @@ import {
 import { createDb, setSyncState, currentWeekId, getStandings, type Database } from "@predictarena/db";
 import { log } from "./log";
 import { ingestWindows } from "./ingest";
-import { ingestCalls } from "./ingest-calls";
+import { ingestCalls, catchUpClosedWindows } from "./ingest-calls";
 import { reconcile } from "./reconcile";
 import { startLiveTail } from "./live";
 
@@ -29,6 +30,8 @@ loadDotenv({ path: resolve(import.meta.dirname, "..", "..", "..", ".env"), quiet
 
 const INGEST_MS = Number(process.env["INGEST_INTERVAL_MS"] ?? 20_000);
 const RECONCILE_MS = Number(process.env["RECONCILE_INTERVAL_MS"] ?? 45_000);
+/** Slow: a safety net for windows the venue no longer lists, not the main path. */
+const CATCH_UP_MS = Number(process.env["CATCH_UP_MS"] ?? 120_000);
 const ASSETS = (process.env["INDEX_ASSETS"] ?? "BTC,ETH").split(",").map((a) => a.trim()).filter(Boolean);
 /** The tail is an optimisation; turning it off must never break correctness. */
 const LIVE_TAIL = process.env["LIVE_TAIL"] !== "0";
@@ -126,6 +129,24 @@ async function main(): Promise<void> {
         { windows: w.written, fills: c.fillsSeen, calls: c.callsWritten, errors: c.errors },
         "ingest cycle",
       );
+    }, () => stopped),
+
+    // Catch-up: windows the venue has stopped listing. The ingest cycle above
+    // can only see LIVE windows, so anything that closed during a restart or a
+    // network gap would otherwise never be ingested -- and those players would
+    // silently be missing from the leaderboard.
+    //
+    // Runs on a slow cadence because it is a safety net, not the main path.
+    loop("catch-up", CATCH_UP_MS, async () => {
+      const c = await catchUpClosedWindows(dex, db);
+      if (c.callsWritten > 0) {
+        log.info(
+          { windows: c.windowsScanned, fills: c.fillsSeen, calls: c.callsWritten },
+          "catch-up recovered calls the live list no longer showed",
+        );
+      } else {
+        log.debug({ windows: c.windowsScanned }, "catch-up cycle (nothing missing)");
+      }
     }, () => stopped),
 
     loop("reconcile", RECONCILE_MS, async () => {

@@ -35,6 +35,13 @@ to install from the workspace root. `apps/web/vercel.json` does that.
 Vercel runs functions, not daemons — the indexer must live somewhere that stays running (Railway,
 Fly, or any small VPS). It needs the same four variables.
 
+**The indexer must stay up, but a gap is no longer fatal.** It runs a catch-up sweep every two
+minutes over windows that closed recently, reading their fills directly by pool address from our
+own table. Before that existed, any window that settled while the indexer was down dropped off the
+venue's live list within minutes and every call placed on it was lost permanently -- players simply
+vanished from the leaderboard. The first run of that sweep recovered 57 calls, and the board went
+from 97 players to 146.
+
 **Run it as a direct process, not through a package-manager wrapper.** `kill -9` on an
 `npx`/`pnpm` wrapper orphans the worker: during Phase 2 one kept running for four minutes and
 corrupted a measurement. Point the supervisor at the real PID:
@@ -83,6 +90,20 @@ Run against the **deployed** URL, on a phone, with a wallet that has never used 
 - **Session state clears on account switch**, so case 8 cannot show one account's calls under
   another's name.
 
+### The core loop, proven end to end on live testnet
+
+`pnpm smoke` completed a full round-trip on Shannon in 66 seconds:
+
+| Step | Result |
+|---|---|
+| Quote | UP at 94.6% implied, 1.0570 contracts for 0.9999 tUSDC |
+| Place | filled 1.0570/1.0570, spent 0.9914 tUSDC |
+| Settle | RESOLVED, winner UP -> **WON** |
+| Redeem | received 1.0570 tUSDC |
+
+And separately, a call placed by the dev wallet settled and **appeared on the leaderboard** at
+rank #143 (0W-1L) -- closing the connect -> call -> settle -> leaderboard chain with real data.
+
 ### Already verified by machine
 
 - Signature is load-bearing: a tampered payload and a wrong wallet both return **401**.
@@ -95,8 +116,8 @@ Run against the **deployed** URL, on a phone, with a wallet that has never used 
 
 ### Known limits, stated rather than hidden
 
-- **The claim flow is not built.** `/portfolio` tells a winner they have unclaimed winnings and
-  explains why, but redeeming still needs `pnpm claim`. Winnings are safe on-chain meanwhile.
+- **Claiming is per position, not one tap for all.** Each redemption is its own on-chain
+  transaction, and the panel is honest about that rather than pretending otherwise.
 - **Only BTC and ETH** are surfaced, though the venue has listed a third asset. Liquidity on the
   others is thin and the demo should not depend on it.
 - Leaderboard rows and stats are client-fetched, so the first paint is skeletons. Fine for an app,

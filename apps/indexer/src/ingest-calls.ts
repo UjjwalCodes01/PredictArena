@@ -17,7 +17,7 @@
  *     orders. Counting makers would put bots on the league table.
  */
 import type { DexClient } from "@predictarena/dex";
-import { upsertCall, touchWallet, weekIdForClose, normalizeAddress, type Database, type NewCallRow } from "@predictarena/db";
+import { upsertCall, touchWallet, weekIdForClose, normalizeAddress, type Database, type NewCallRow, getRecentlyClosedWindows } from "@predictarena/db";
 import type { CallStatus, Direction } from "@predictarena/db";
 import { log } from "./log";
 
@@ -211,4 +211,42 @@ export async function ingestCalls(
   }
 
   return result;
+}
+
+/**
+ * Catch-up sweep for windows the venue no longer lists.
+ *
+ * The normal cycle can only see LIVE windows. A window that closed while the
+ * indexer was restarting, or during any gap in its uptime, drops off that list
+ * within minutes and its fills become unreachable -- so every call placed on it
+ * is lost from the projection permanently, and those players silently vanish
+ * from the leaderboard.
+ *
+ * This reads recently-closed windows from OUR OWN table, where the pool address
+ * was stored at ingest time, and re-scans their fills. Ingestion is idempotent
+ * (calls are keyed on the fill), so re-scanning a window we already have is
+ * harmless and cheap.
+ */
+export async function catchUpClosedWindows(
+  dex: DexClient,
+  db: Database,
+  sinceMinutes = 180,
+): Promise<IngestCallsResult> {
+  const rows = await getRecentlyClosedWindows(db, sinceMinutes);
+  if (rows.length === 0) {
+    return { windowsScanned: 0, fillsSeen: 0, callsWritten: 0, errors: 0 };
+  }
+
+  const targets: IngestTarget[] = rows.map((r) => ({
+    marketId: r.id,
+    pool: r.pool as `0x${string}`,
+    asset: r.asset,
+    closesAtSec: Math.floor(r.closesAt.getTime() / 1000),
+    // Settlement state is reconciled separately; ingestion only needs the fills.
+    resolved: false,
+    voided: false,
+    winningOutcome: 0,
+  }));
+
+  return ingestCalls(dex, db, targets);
 }

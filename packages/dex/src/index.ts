@@ -44,7 +44,7 @@ export {
 } from "./windows";
 
 export {
-  quoteCall, getTopOfBook, getBalances, preflightCall, prepareCall, placeCall, idempotencyKey,
+  quoteCall, getTopOfBook, getBalances, isUnfillable, preflightCall, prepareCall, placeCall, idempotencyKey,
   ORDER_TYPE_REST, ORDER_TYPE_FILL_OR_KILL, ORDER_TYPE_IOC, ORDER_TYPE_POST_ONLY,
   type Quote, type TopOfBook, type Balances, type Preflight, type CallRequest, type PreparedCall, type PlacedCall,
 } from "./orders";

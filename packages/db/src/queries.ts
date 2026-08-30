@@ -6,7 +6,7 @@
  * converge on the same row, because the reconciler will do exactly that every
  * 45 seconds and again on every startup.
  */
-import { and, desc, eq, inArray, lt, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, lt, ne, or, sql } from "drizzle-orm";
 import type { Database } from "./client";
 import { calls, wallets, windows, syncState } from "./schema";
 import type { NewCallRow, NewWindowRow, CallRow, WindowRow } from "./schema";
@@ -507,6 +507,31 @@ export async function getLeagueTotals(db: Database, weekId: string): Promise<{
     .from(calls)
     .where(eq(calls.weekId, weekId));
   return row ?? { players: 0, calls: 0, settled: 0, volume: "0" };
+}
+
+/**
+ * Windows that closed recently and whose fills may not all be ingested.
+ *
+ * The venue drops settled windows from its live list within minutes, so the
+ * normal ingest cycle cannot see them. This is the catch-up list: anything that
+ * closed in the recent past and for which we hold a pool address, so its fills
+ * can still be read directly.
+ */
+export async function getRecentlyClosedWindows(
+  db: Database,
+  sinceMinutes = 180,
+): Promise<Array<{ id: string; pool: string; asset: string; intervalSec: number | null; closesAt: Date }>> {
+  const cutoff = new Date(Date.now() - sinceMinutes * 60_000);
+  const rows = await db
+    .select({
+      id: windows.id, pool: windows.pool, asset: windows.asset,
+      intervalSec: windows.intervalSec, closesAt: windows.closesAt,
+    })
+    .from(windows)
+    .where(and(gte(windows.closesAt, cutoff), isNotNull(windows.pool)))
+    .orderBy(desc(windows.closesAt))
+    .limit(200);
+  return rows.filter((r): r is typeof r & { pool: string } => r.pool !== null);
 }
 
 /** Windows by id, for reconciling a batch of calls in one round trip. */

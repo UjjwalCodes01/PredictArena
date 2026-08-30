@@ -316,6 +316,12 @@ function PhaseNote({
           {...(phase.action ? { action: phase.action } : {})}
           onRetry={onDismiss}
         />
+        {phase.code === "NO_LIQUIDITY" ? (
+          <p className="mt-2 text-xs text-ink-faint">
+            Binary contracts need someone on the other side. A heavy favourite often has no
+            sellers, because the payout barely beats the price.
+          </p>
+        ) : null}
         {phase.code === "INSUFFICIENT_GAS" || phase.code === "INSUFFICIENT_STAKE" ? (
           <a
             href="https://testnet.somnia.network"

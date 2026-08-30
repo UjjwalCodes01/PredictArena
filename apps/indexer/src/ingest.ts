@@ -54,6 +54,9 @@ export async function ingestWindows(dex: DexClient, db: Database, assets?: reado
         id: w.marketId,
         asset: w.asset,
         venueId: w.venueId,
+        // Kept so this window's fills stay readable after the venue stops
+        // listing it -- see the catch-up sweep in ingest-calls.
+        pool: w.pool,
         intervalSec: w.intervalSec,
         strike: w.strike,
         opensAt: new Date(w.opensAtSec * 1000),

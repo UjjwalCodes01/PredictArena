@@ -39,6 +39,14 @@ export const windows = pgTable(
     id: text("id").primaryKey(),
     asset: text("asset").notNull(),
     venueId: text("venue_id"),
+    /**
+     * The market's pool address.
+     *
+     * Stored so fills stay reachable AFTER the venue drops a settled window
+     * from its live list. Without it, a window that closed while the indexer
+     * was down becomes unreadable and every call placed on it is lost.
+     */
+    pool: text("pool"),
     intervalSec: integer("interval_sec"),
     /** Reference price the outcome is measured against; 0 until the window opens. */
     strike: numeric("strike", { precision: 78, scale: 0 }),

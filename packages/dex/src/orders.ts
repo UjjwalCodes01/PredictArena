@@ -121,6 +121,20 @@ export async function getTopOfBook(client: DexClient, pool: `0x${string}`): Prom
   };
 }
 
+/**
+ * Did this revert mean "nothing to fill against"?
+ *
+ * An IOC order that finds no depth reverts with ImmediateOrCancel, and it is
+ * COMMON: the ask side on a heavy favourite is often empty, because nobody
+ * sells a near-certainty. Live testing hit it five times consecutively at
+ * 80-83% implied.
+ *
+ * Exported so the behaviour is testable rather than buried in a catch block.
+ */
+export function isUnfillable(e: unknown): boolean {
+  return /immediateorcancel|\bioc\b/i.test(String(e));
+}
+
 export interface Balances {
   readonly stt: bigint;
   readonly collateral: bigint;
@@ -403,6 +417,20 @@ export async function placeCall(client: DexClient, req: CallRequest): Promise<Pl
       userData,
     });
   } catch (e) {
+    // An IOC that finds nothing to fill against reverts with a distinct
+    // reason, and it is COMMON: the ask side on a heavy favourite is often
+    // empty, because nobody sells a near-certainty. Live testing hit this five
+    // times consecutively at 80-83% implied.
+    //
+    // It deserves its own code because the user's fix is different -- a smaller
+    // stake or the other side, not "wait for the next window".
+    if (isUnfillable(e)) {
+      throw new DexError(
+        "NO_LIQUIDITY",
+        "Nobody is currently selling that side at a price your order could take.",
+        { action: "Try a smaller stake, or the other direction.", retryable: true },
+      );
+    }
     throw asDexError(e, "ORDER_REJECTED");
   }
 

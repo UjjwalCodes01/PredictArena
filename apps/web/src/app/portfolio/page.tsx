@@ -17,11 +17,8 @@ import { PlayerIdentity } from "@/components/PlayerIdentity";
 import { FormStrip } from "@/components/FormStrip";
 import { Card, Empty, ErrorNote, Skeleton, Stat, StatusPill, Button } from "@/components/ui";
 import { NetworkBanner } from "@/components/Wallet";
+import { ClaimPanel } from "@/components/ClaimPanel";
 
-interface Claimable {
-  total: string;
-  positions: Array<{ marketId: string; outcomeIdx: 0 | 1; amount: string; estPayout: string }>;
-}
 
 export default function PortfolioPage() {
   const { address, isConnected } = useAccount();
@@ -46,16 +43,6 @@ export default function PortfolioPage() {
     },
   });
 
-  const claimable = useQuery({
-    queryKey: ["claimable", address],
-    queryFn: async (): Promise<Claimable> => {
-      const r = await fetch(`/api/claimable?wallet=${address}`, { cache: "no-store" });
-      if (!r.ok) throw new Error("Could not check unclaimed winnings.");
-      return r.json();
-    },
-    enabled: Boolean(address),
-    retry: 0,
-  });
 
   if (!isConnected || !address) {
     return (
@@ -72,7 +59,6 @@ export default function PortfolioPage() {
   const standing = board.data?.standings.find(
     (s) => s.wallet.toLowerCase() === address.toLowerCase(),
   );
-  const unclaimed = claimable.data && BigInt(claimable.data.total) > 0n;
 
   return (
     <>
@@ -83,21 +69,8 @@ export default function PortfolioPage() {
         <PlayerIdentity address={address} size={36} link={false} />
       </div>
 
-      {unclaimed ? (
-        <div className="mb-4 rounded-lg border border-up/40 bg-up-soft px-4 py-3">
-          <p className="text-sm font-medium text-ink">
-            You have {amount(claimable.data!.total, 2)} tUSDC waiting
-          </p>
-          <p className="mt-1 text-sm text-ink-soft">
-            Winnings are claimed, not sent automatically. Redeeming moves them to your wallet.
-          </p>
-          <Link href="/how-it-works#claiming">
-            <Button variant="secondary" className="mt-2">
-              How claiming works
-            </Button>
-          </Link>
-        </div>
-      ) : null}
+      <ClaimPanel />
+
 
       <Card className="mb-6 p-4">
         {board.isPending ? (
