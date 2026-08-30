@@ -13,10 +13,14 @@ import { useEffect, useState } from "react";
 import { useAccount } from "wagmi";
 import type { Direction } from "@predictarena/dex";
 import type { WindowDto, QuoteDto } from "@/lib/types";
-import { amount, percent, countdown, seriesLabel } from "@/lib/format";
+import { amount, percent, countdown, seriesLabel, COLLATERAL_SYMBOL } from "@/lib/format";
 import { usePlaceCall } from "@/hooks/usePlaceCall";
+import { useBalances } from "@/hooks/useBalances";
 import { useIsWrongNetwork } from "./Wallet";
 import { Button, Card, ErrorNote, Skeleton } from "./ui";
+import { stt as formatStt } from "@/lib/format";
+
+const FAUCET_URL = "https://testnet.somnia.network";
 
 const STAKE_PRESETS = [1, 5, 10] as const;
 const COLLATERAL_UNIT = 1_000_000n; // 6 decimals
@@ -33,6 +37,10 @@ export function CallPanel({
   const { isConnected } = useAccount();
   const wrongNetwork = useIsWrongNetwork();
   const { phase, place, reset, busy } = usePlaceCall();
+  // Read what the wallet holds up front. The plan asks for the SPECIFIC
+  // shortfall and a faucet link, and neither is possible if the first time we
+  // look at a balance is inside a thrown error.
+  const { data: balances } = useBalances(w.pool as `0x${string}`);
 
   const [direction, setDirection] = useState<Direction | null>(null);
   const [stakeWhole, setStakeWhole] = useState<number>(1);
@@ -42,6 +50,14 @@ export function CallPanel({
 
   const stake = BigInt(stakeWhole) * COLLATERAL_UNIT;
   const closed = secondsLeft <= 0 || !w.isTradable;
+
+  // Two separate shortfalls with two different fixes: gas is STT, stake is
+  // tUSDC. Collapsing them into one "insufficient funds" would send people to
+  // claim the wrong token.
+  const noGas = balances ? !balances.canPayGas : false;
+  const affordable = (whole: number): boolean =>
+    !balances || balances.collateral >= BigInt(whole) * COLLATERAL_UNIT;
+  const cannotAffordAny = balances ? !affordable(STAKE_PRESETS[0]) : false;
 
   // Re-price whenever the choice changes. The quote is an estimate: takers pay
   // the fill price, so the exact cost only exists after the fill.
@@ -119,13 +135,39 @@ export function CallPanel({
       {direction ? (
         <div className="border-b border-border p-4">
           <span className="label">STAKE</span>
-          <p className="mb-3 mt-1 text-sm font-medium text-ink">How much do you want to stake?</p>
+          <p className="mb-2 mt-1 text-sm font-medium text-ink">How much do you want to stake?</p>
+
+          <BalanceStrip balances={balances} />
+
+          {noGas || cannotAffordAny ? (
+            <div className="mb-3 rounded-sm border border-warn/40 bg-warn-soft/60 px-3 py-2">
+              <p className="text-sm text-ink">
+                {noGas && cannotAffordAny
+                  ? "You need STT for gas and tUSDC to stake."
+                  : noGas
+                    ? "You need STT to pay for the transaction."
+                    : `You need at least ${STAKE_PRESETS[0]} ${COLLATERAL_SYMBOL} to place a call.`}
+              </p>
+              <a
+                href={FAUCET_URL}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="label mt-1 inline-block text-accent hover:brightness-125"
+              >
+                [ GET TESTNET FUNDS ]
+              </a>
+            </div>
+          ) : null}
+
           <div className="flex gap-2" role="group" aria-label="Stake amount">
             {STAKE_PRESETS.map((v) => (
               <button
                 key={v}
                 onClick={() => setStakeWhole(v)}
-                disabled={busy}
+                // A stake the wallet cannot cover is offered greyed rather than
+                // hidden: seeing it explains why the balance line matters.
+                disabled={busy || !affordable(v)}
+                title={affordable(v) ? undefined : `Not enough ${COLLATERAL_SYMBOL}`}
                 aria-pressed={stakeWhole === v}
                 className={`tabular flex-1 rounded-sm border px-3 py-2.5 text-sm font-medium transition-colors disabled:opacity-45 ${
                   stakeWhole === v
@@ -158,7 +200,7 @@ export function CallPanel({
       {direction ? (
         <div className="p-4">
           <PlaceAction
-            disabled={!isConnected || wrongNetwork || !quote || busy || quoting}
+            disabled={!isConnected || wrongNetwork || !quote || busy || quoting || noGas || cannotAffordAny}
             isConnected={isConnected}
             wrongNetwork={wrongNetwork}
             phase={phase}
@@ -288,4 +330,37 @@ function PhaseNote({
     );
   }
   return null;
+}
+
+/**
+ * What the wallet holds, in the two tokens that matter.
+ *
+ * Shown before a stake is picked, because "you cannot afford this" is far more
+ * useful before the choice than after it.
+ */
+function BalanceStrip({ balances }: { balances: ReturnType<typeof useBalances>["data"] }) {
+  if (!balances) {
+    return (
+      <div className="mb-3 flex gap-4">
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-4 w-24" />
+      </div>
+    );
+  }
+  return (
+    <div className="mb-3 flex flex-wrap gap-x-5 gap-y-1">
+      <span className="label">
+        BALANCE{" "}
+        <span className={`tabular ${balances.collateral === 0n ? "text-warn" : "text-ink-soft"}`}>
+          {amount(balances.collateral, 2)} {COLLATERAL_SYMBOL}
+        </span>
+      </span>
+      <span className="label">
+        GAS{" "}
+        <span className={`tabular ${balances.canPayGas ? "text-ink-soft" : "text-warn"}`}>
+          {formatStt(balances.stt, 3)} STT
+        </span>
+      </span>
+    </div>
+  );
 }

@@ -18,9 +18,10 @@
 import { useCallback, useRef, useState } from "react";
 import { useAccount, useWalletClient } from "wagmi";
 import {
-  createDexClient, prepareCall, getWindows, DexError,
+  createDexClient, prepareCall, getWindows, idempotencyKey, DexError,
   type Direction, type Window as DexWindow,
 } from "@predictarena/dex";
+import { addPending } from "@/lib/pending";
 import { RPC_URL } from "@/lib/wagmi";
 
 const INDEXER_URL =
@@ -145,6 +146,20 @@ export function usePlaceCall() {
           });
           return;
         }
+
+        // Show it immediately. The indexer needs tens of seconds to report this
+        // call, and an empty list in the meantime reads as failure.
+        addPending({
+          txHash,
+          wallet: address,
+          marketId,
+          asset: target.asset,
+          direction,
+          stake: stake.toString(),
+          quantity: ready.quote.quantity.toString(),
+          placedAt: new Date().toISOString(),
+          idempotencyKey: idempotencyKey(address, marketId as `0x${string}`).toString(),
+        });
 
         setPhase({ kind: "placed", txHash, filled: ready.quote.quantity });
       } catch (e) {

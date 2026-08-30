@@ -121,6 +121,46 @@ export async function getTopOfBook(client: DexClient, pool: `0x${string}`): Prom
   };
 }
 
+export interface Balances {
+  readonly stt: bigint;
+  readonly collateral: bigint;
+  readonly allowance: bigint;
+  /** True when STT covers the funded gas ceiling, not merely when it is above zero. */
+  readonly canPayGas: boolean;
+}
+
+/**
+ * Balances for DISPLAY. Never throws on a shortfall.
+ *
+ * `preflightCall` deliberately throws so a call cannot be signed against an
+ * empty wallet. That is the wrong shape for showing someone what they hold
+ * BEFORE they choose a stake -- an exception is not a balance. This reads the
+ * same three values and reports them plainly.
+ *
+ * `allowance` is per-pool, so it is only meaningful with a window in hand;
+ * omit the pool and it comes back as zero.
+ */
+export async function getBalances(
+  client: DexClient,
+  account: `0x${string}`,
+  pool?: `0x${string}`,
+): Promise<Balances> {
+  const [stt, collateral, allowance] = await client.queue.run(() =>
+    Promise.all([
+      client.rpc.getBalance({ address: account }),
+      client.rpc.readContract({
+        address: client.collateral.address, abi: erc20Abi, functionName: "balanceOf", args: [account],
+      }),
+      pool
+        ? client.rpc.readContract({
+            address: client.collateral.address, abi: erc20Abi, functionName: "allowance", args: [account, pool],
+          })
+        : Promise.resolve(0n),
+    ]),
+  );
+  return { stt, collateral, allowance, canPayGas: stt >= GAS_CEILING_WEI };
+}
+
 export interface Preflight {
   readonly sttBalance: bigint;
   readonly collateralBalance: bigint;

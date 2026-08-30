@@ -41,14 +41,24 @@ export function WindowFeed({ onPlaced }: { onPlaced: () => void }) {
   const now = useServerClock(data?.serverNowSec);
   useTick(Boolean(data));
 
-  const chosen: WindowDto | undefined = useMemo(() => {
-    if (!data) return undefined;
+  const { chosen, next } = useMemo((): { chosen?: WindowDto; next?: WindowDto } => {
+    if (!data) return {};
     const tradable = data.windows.filter((w) => w.isTradable);
     // Prefer the demo-friendly series, but never show nothing just because that
     // series happens to be mid-roll.
     const preferred = tradable.filter((w) => w.intervalSec === PREFERRED_INTERVAL);
     const pool = preferred.length > 0 ? preferred : tradable;
-    return [...pool].sort((a, b) => a.closesAtSec - b.closesAtSec)[0];
+    const sorted = [...pool].sort((a, b) => a.closesAtSec - b.closesAtSec);
+    const current = sorted[0];
+    // The next window is the next one to CLOSE LATER -- not simply the second
+    // in the list. The venue runs several windows of a series concurrently, so
+    // sorted[1] is often a parallel window closing at the same moment, and
+    // calling that "next" would tell someone to wait for something already
+    // running.
+    const following = current
+      ? sorted.find((w) => w.closesAtSec > current.closesAtSec)
+      : undefined;
+    return { chosen: current, next: following };
   }, [data]);
 
   const secondsLeft = chosen ? chosen.closesAtSec - now() / 1000 : 0;
@@ -119,6 +129,25 @@ export function WindowFeed({ onPlaced }: { onPlaced: () => void }) {
           </Panel>
 
           <CallPanel window={chosen} secondsLeft={secondsLeft} onPlaced={handlePlaced} />
+
+          {/*
+            What comes next. Two honest cases, and no invented times:
+
+            - A later window of this series is already open -- show when it
+              settles, which is a fact the API gave us.
+            - None is open yet, because the venue runs this series' windows in
+              parallel and starts the next batch on close. Say that, rather
+              than deriving an "opens in" from close-minus-interval, which
+              would be a guess about scheduling presented as a countdown.
+          */}
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-surface px-3 py-2">
+            <span className="label">NEXT WINDOW</span>
+            <span className="tabular text-xs text-ink-soft">
+              {next
+                ? `${seriesLabel(next.intervalSec)} · settles in ${countdown(next.closesAtSec - now() / 1000)}`
+                : `a new ${seriesLabel(chosen.intervalSec)} window opens when this one closes`}
+            </span>
+          </div>
         </div>
       )}
     </section>

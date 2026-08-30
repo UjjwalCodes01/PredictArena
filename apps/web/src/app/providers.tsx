@@ -1,9 +1,10 @@
 "use client";
 
-import { WagmiProvider } from "wagmi";
+import { WagmiProvider, useAccount } from "wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { wagmiConfig } from "@/lib/wagmi";
+import { clearPending } from "@/lib/pending";
 
 export function Providers({ children }: { children: ReactNode }) {
   // Created once per mount, not per render, so the cache is not thrown away.
@@ -24,7 +25,25 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <WagmiProvider config={wagmiConfig}>
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      <QueryClientProvider client={queryClient}>
+        <SessionReset />
+        {children}
+      </QueryClientProvider>
     </WagmiProvider>
   );
+}
+
+/**
+ * Clear browser-held session state when the account changes or disconnects.
+ *
+ * wagmi resets its own state on `accountsChanged`, but our optimistic pending
+ * rows are ours to clean up -- leaving them would show one account's calls
+ * under another's name, which is worse than showing nothing.
+ */
+function SessionReset() {
+  const { address } = useAccount();
+  useEffect(() => {
+    clearPending();
+  }, [address]);
+  return null;
 }

@@ -23,6 +23,7 @@ to install from the workspace root. `apps/web/vercel.json` does that.
    | `INDEXER_URL` | `https://dev.smk.somnia.host/v1/graphql` | Shannon market data |
    | `RPC_HTTP_URL` | `https://dream-rpc.somnia.network` | chain reads |
    | `RPC_WS_URL` | `wss://dream-rpc.somnia.network/ws` | live tail |
+   | `WALLETCONNECT_PROJECT_ID` | *(optional)* from cloud.walletconnect.com | offers WalletConnect alongside injected wallets. Public — it identifies the app, it authorises nothing. Omit it and the site still works, offering MetaMask/Brave only. |
 
    `DATABASE_URL` is a secret and is only ever read server-side (`src/lib/server.ts`). Nothing in the
    browser bundle references it.
@@ -69,12 +70,26 @@ Run against the **deployed** URL, on a phone, with a wallet that has never used 
 | 14 | **Share card** | Paste your `/p/<address>` link into any chat; the preview shows rank and record. |
 | 15 | **Airplane mode mid-view** | Panels show an error with a retry, not a white screen. |
 
+### Covered since the first pass
+
+- **WalletConnect** is offered when `WALLETCONNECT_PROJECT_ID` is set, so the matrix can be run
+  from a phone wallet rather than only a desktop extension.
+- **Balances are read before a stake is chosen**, so "not enough STT" and "not enough tUSDC" are
+  two different messages with two different fixes — cases 4 and 5 no longer depend on a thrown
+  error to surface.
+- **An optimistic PENDING row** appears the moment a transaction confirms, keyed by the same
+  idempotency key the order carries on-chain, and disappears when the indexer reports the real
+  record. Case 7 no longer shows an empty list between signing and indexing.
+- **Session state clears on account switch**, so case 8 cannot show one account's calls under
+  another's name.
+
 ### Already verified by machine
 
 - Signature is load-bearing: a tampered payload and a wrong wallet both return **401**.
 - URL scheme allowlist: `javascript:`, `data:`, `vbscript:`, `file:` and `ftp:` are all refused.
 - All 10 pages return 200; all 22 images serve; **zero emoji** in any rendered page.
-- `typecheck`, `lint`, **174 tests**, and `build` all pass.
+- `typecheck`, `lint`, **187 tests**, `build`, and `check:bundle` all pass.
+- Warm API latency is 3–18ms across every endpoint (see the caching notes in `lib/cache.ts`).
 - Colour: the Up/Down pair passes the palette validator including colourblind separation
   (deutan ΔE 13.4 against a threshold of 8).
 

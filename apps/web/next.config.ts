@@ -25,6 +25,9 @@ const config: NextConfig = {
   env: {
     NEXT_PUBLIC_RPC_HTTP_URL: process.env["RPC_HTTP_URL"] ?? "https://dream-rpc.somnia.network",
     NEXT_PUBLIC_INDEXER_URL: process.env["INDEXER_URL"] ?? "https://dev.smk.somnia.host/v1/graphql",
+    // Public by design: it identifies the app to WalletConnect, it authorises
+    // nothing. Absent, the connector is not offered at all.
+    NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: process.env["WALLETCONNECT_PROJECT_ID"] ?? "",
   },
 };
 

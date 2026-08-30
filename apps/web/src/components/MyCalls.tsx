@@ -7,8 +7,10 @@
  * appears here because the chain says so -- not because this browser claims it
  * placed one.
  */
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAccount } from "wagmi";
+import { usePending, reconcile } from "@/lib/pending";
 import type { CallDto } from "@/lib/types";
 import { amount, timeAgo } from "@/lib/format";
 import { Card, Empty, ErrorNote, Skeleton, StatusPill } from "./ui";
@@ -33,7 +35,18 @@ export function MyCalls({ refreshKey }: { refreshKey: number }) {
     refetchInterval: 15_000,
   });
 
+  const pending = usePending(address);
+
+  // Drop optimistic rows the indexer has now reported. Matched on transaction
+  // hash, so the real record always replaces the placeholder rather than
+  // sitting beside it.
+  useEffect(() => {
+    if (data?.calls) reconcile(data.calls);
+  }, [data]);
+
   if (!isConnected) return null;
+
+  const hasAnything = pending.length > 0 || (data?.calls.length ?? 0) > 0;
 
   return (
     <section aria-label="Your calls" className="mt-8">
@@ -58,7 +71,7 @@ export function MyCalls({ refreshKey }: { refreshKey: number }) {
           action="Your positions are safe on-chain; this is a display problem."
           onRetry={() => void refetch()}
         />
-      ) : !data || data.calls.length === 0 ? (
+      ) : !hasAnything ? (
         <Card>
           <Empty
             title="No calls yet"
@@ -68,7 +81,20 @@ export function MyCalls({ refreshKey }: { refreshKey: number }) {
         </Card>
       ) : (
         <Card className="divide-y divide-border">
-          {data.calls.map((c) => (
+          {pending.map((p) => (
+            <div key={p.txHash} className="flex items-center justify-between gap-3 p-4 opacity-80">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-ink">
+                  {p.asset} {p.direction === "UP" ? "Up" : "Down"}
+                </p>
+                <p className="tabular mt-0.5 text-xs text-ink-faint">
+                  {amount(p.stake, 2)} tUSDC · confirming
+                </p>
+              </div>
+              <StatusPill status="PENDING" />
+            </div>
+          ))}
+          {(data?.calls ?? []).map((c) => (
             <div key={c.id} className="flex items-center justify-between gap-3 p-4">
               <div className="min-w-0">
                 <p className="text-sm font-medium text-ink">
