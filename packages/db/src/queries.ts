@@ -44,7 +44,7 @@ export async function upsertCall(db: Database, row: NewCallRow): Promise<void> {
     .insert(calls)
     .values(row)
     .onConflictDoUpdate({
-      target: [calls.txHash, calls.direction],
+      target: [calls.txHash, calls.windowId, calls.direction],
       set: {
         status: sql`excluded.status`,
         quantity: sql`excluded.quantity`,
@@ -67,6 +67,18 @@ export async function settleCallsForWindow(
   params: { windowId: string; winningOutcome: number | null; voided: boolean; settledAt: Date },
 ): Promise<number> {
   const { windowId, winningOutcome, voided, settledAt } = params;
+
+  // Refuse to guess. An earlier version wrote
+  //   winningOutcome === 0 ? "UP" : "DOWN"
+  // which silently treated a NULL outcome as "Down won" -- marking every Up
+  // call LOST and every Down call WON on a window whose result we did not
+  // actually know. Fabricating results is worse than settling nothing, so an
+  // outcome that is neither 0 nor 1 is an error, not a default.
+  if (!voided && winningOutcome !== 0 && winningOutcome !== 1) {
+    throw new Error(
+      `settleCallsForWindow(${windowId}): winningOutcome must be 0 or 1 when not voided, got ${String(winningOutcome)}`,
+    );
+  }
 
   const status = voided
     ? sql`'VOID'::call_status`
@@ -107,22 +119,52 @@ export async function markWindowSettled(
   return updated.length > 0;
 }
 
-/** Calls that are still non-terminal. The reconciler's work list. */
-export async function getNonTerminalCalls(db: Database, limit = 500): Promise<CallRow[]> {
-  return db.select().from(calls).where(eq(calls.status, "PENDING")).limit(limit);
+/**
+ * Calls that are still non-terminal -- the reconciler's work list.
+ *
+ * Paged rather than capped. A bare `limit` silently drops everything past it,
+ * and the calls that get dropped are precisely the ones a restart is supposed
+ * to recover: the guarantee would quietly stop applying above a threshold
+ * nobody was watching.
+ */
+export async function getNonTerminalCalls(db: Database, maxRows = 20_000): Promise<CallRow[]> {
+  return pageAll((offset, size) =>
+    db.select().from(calls).where(eq(calls.status, "PENDING"))
+      .orderBy(calls.placedAt).limit(size).offset(offset),
+    maxRows,
+  );
+}
+
+const PAGE = 500;
+
+/** Reads every row in pages, stopping at `maxRows` as a runaway guard. */
+async function pageAll<T>(
+  fetch: (offset: number, size: number) => Promise<T[]>,
+  maxRows: number,
+): Promise<T[]> {
+  const out: T[] = [];
+  for (let offset = 0; offset < maxRows; offset += PAGE) {
+    const page = await fetch(offset, Math.min(PAGE, maxRows - offset));
+    out.push(...page);
+    if (page.length < PAGE) break;
+  }
+  return out;
 }
 
 /**
  * Pending calls whose window has already closed -- these are overdue for a
  * settlement and are what the 45s poller chases.
  */
-export async function getOverdueCalls(db: Database, now: Date, limit = 200): Promise<CallRow[]> {
-  const rows = await db
-    .select({ call: calls })
-    .from(calls)
-    .innerJoin(windows, eq(calls.windowId, windows.id))
-    .where(and(eq(calls.status, "PENDING"), lt(windows.closesAt, now)))
-    .limit(limit);
+export async function getOverdueCalls(db: Database, now: Date, maxRows = 20_000): Promise<CallRow[]> {
+  const rows = await pageAll((offset, size) =>
+    db.select({ call: calls })
+      .from(calls)
+      .innerJoin(windows, eq(calls.windowId, windows.id))
+      .where(and(eq(calls.status, "PENDING"), lt(windows.closesAt, now)))
+      .orderBy(windows.closesAt)
+      .limit(size).offset(offset),
+    maxRows,
+  );
   return rows.map((r) => r.call);
 }
 

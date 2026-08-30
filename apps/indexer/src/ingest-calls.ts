@@ -181,7 +181,9 @@ export async function ingestCalls(
 
     for (const c of byCall.values()) {
       const row: NewCallRow = {
-        id: `${c.txHash}:${c.direction}`,
+        // The window belongs in the identity: one batch transaction can trade
+        // two windows in the same direction, and those are two calls.
+        id: `${c.txHash}:${w.marketId}:${c.direction}`,
         wallet: c.wallet,
         windowId: w.marketId,
         asset: w.asset,

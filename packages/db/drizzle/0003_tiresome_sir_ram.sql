@@ -1,0 +1,1 @@
+ALTER TABLE "calls" DROP COLUMN "idempotency_key";

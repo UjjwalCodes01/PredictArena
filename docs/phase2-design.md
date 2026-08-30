@@ -212,3 +212,73 @@ is whatever the book gave you. There is no per-window ratio to store.
 The equivalent is per-call, and it is already recorded: `stake / quantity` is the average price
 actually paid, which is the number a player cares about ("I paid 0.55 for something worth 1").
 Storing a window-level ratio would be inventing a figure the venue does not have.
+
+
+---
+
+## Final audit
+
+A last pass over the write paths. Four more real defects; all fixed.
+
+### 1. Settlement could FABRICATE an outcome 🔴 severe
+
+`settleCallsForWindow` derived the winner as:
+
+```ts
+winningOutcome === 0 ? "UP" : "DOWN"
+```
+
+A `null` outcome on a non-voided window therefore fell through to "Down won" -- marking **every Up
+call LOST and every Down call WON** on a window whose result was not actually known. Silent, wrong,
+and in the one place the whole project promises never to guess.
+
+The precondition is now explicit: an outcome that is neither 0 nor 1, on a window that did not void,
+raises rather than defaults. Five tests pin it, using a database stub that throws if it is ever
+reached -- which is how we prove the guard fires *before* any row is touched.
+
+### 2. One transaction trading two windows lost a call 🔴
+
+Call identity was `(tx_hash, direction)`. A single batch transaction taking the same direction on two
+different windows produced the same id and the same unique key, so one row silently overwrote the
+other and a player's entry vanished. Identity is now `(tx_hash, window_id, direction)`, with a
+migration. Verified: zero duplicate groups afterwards.
+
+### 3. The reconciler silently truncated its own work list 🔴
+
+`getNonTerminalCalls` capped at 500 rows and `getOverdueCalls` at 200. Past that, calls were simply
+never reconciled -- and the dropped ones are exactly what a restart is supposed to recover. The
+guarantee would have quietly stopped applying above a threshold nobody was watching. Both now page
+through everything, with a runaway guard rather than a silent cap.
+
+### 4. A column that lied about what it guaranteed
+
+`calls.idempotency_key` was never populated in 389 rows. Worse than dead: the name implies
+idempotency is keyed on it, when the unique index is what actually provides it. Dropped.
+
+### Checked and found correct
+
+- **Fill timestamps are seconds, not milliseconds** -- `* 1000` is right (measured: 1788031290 ->
+  2026-08-29). Had it been milliseconds, every call would have been dated 1970.
+- No duplicate or mixed-case wallet rows.
+- Indexer runs clean: 0 warnings, 0 errors across a full cycle.
+
+### Reserved, not dead -- and deliberately so
+
+`payout` and `redeem_tx_hash` stay NULL because **winnings are claimed, not received**: a settled
+call is not a paid call, and the claim flow writes them in a later phase. `display_name` stays NULL
+because the wallet address IS the identity. `FAILED` is unreachable from the indexer by design -- a
+rejected order produces no fill, so no call row -- and exists for Phase 3 to record an attempt that
+never became a position, rather than leaving a phantom PENDING row.
+
+## Verdict
+
+| PLAN.md Phase 2 | State |
+|---|---|
+| `packages/db` schema (4 tables) | Done. `payout_ratio` deliberately absent -- see above |
+| `apps/indexer`: WS + 45s reconcile + startup reconcile | Done |
+| Week assignment at insert | Done, 15 tests including both year boundaries |
+| Structured logs (pino) | Done |
+| Scoring engine, table-driven tests | Done, 32 tests |
+| Gate: kill/restart still settles | **Met** -- 81 calls recovered from chain alone |
+| Gate: scoring tests incl. void + cap | **Met** |
+| Gate: no float near amounts, checked in CI | **Met** -- and the check now actually covers the database |

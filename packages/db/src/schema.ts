@@ -80,12 +80,20 @@ export const calls = pgTable(
     /** Outcome contracts actually filled, base units. */
     quantity: numeric("quantity", { precision: 78, scale: 0 }).notNull().default("0"),
     txHash: text("tx_hash").notNull(),
-    /** The on-chain userData we set: deterministic per (wallet, window). */
-    idempotencyKey: numeric("idempotency_key", { precision: 78, scale: 0 }),
+    /**
+     * PENDING until the window settles. FAILED is reserved for Phase 3's
+     * optimistic rows: a rejected order produces no fill, so the indexer can
+     * never create one -- it exists so the UI can record an attempt that never
+     * became a position, rather than leaving a phantom PENDING row.
+     */
     status: callStatus("status").notNull().default("PENDING"),
     placedAt: timestamp("placed_at", { withTimezone: true }).notNull(),
     settledAt: timestamp("settled_at", { withTimezone: true }),
-    /** Collateral received on redemption, base units. Null until claimed. */
+    /**
+     * Redemption. Both stay NULL until a winner claims -- winnings are claimed,
+     * not received, so a settled call is not a paid call. Written by the claim
+     * flow in a later phase; the indexer never fills these in.
+     */
     payout: numeric("payout", { precision: 78, scale: 0 }),
     redeemTxHash: text("redeem_tx_hash"),
     /** Inherited from the window's close time. Decided once, never recomputed. */
@@ -93,11 +101,17 @@ export const calls = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    // Ingest idempotency. Keyed on (tx_hash, direction), NOT tx_hash alone: one
-    // order can sweep several price levels and so produce several fills sharing
-    // a transaction, and a batch could in principle take both sides. Those are
-    // one call per direction, not one row per fill -- a user tapped once.
-    uniqueIndex("calls_tx_direction_uidx").on(t.txHash, t.direction),
+    // Ingest idempotency. Keyed on (tx_hash, window_id, direction).
+    //
+    // Not tx_hash alone: one order can sweep several price levels and produce
+    // several fills sharing a transaction -- those are ONE call, because the
+    // user tapped once.
+    //
+    // And not (tx_hash, direction) either, which was the previous key: a single
+    // batch transaction can trade two different windows in the same direction,
+    // and those two calls would have collided, silently overwriting one another
+    // and losing a player's entry.
+    uniqueIndex("calls_tx_window_direction_uidx").on(t.txHash, t.windowId, t.direction),
     // NOT unique: several calls on one window are legal on-chain. The
     // one-per-window rule is a scoring cap, not a storage constraint.
     index("calls_wallet_window_idx").on(t.wallet, t.windowId),
@@ -113,7 +127,11 @@ export const wallets = pgTable("wallets", {
   address: text("address").primaryKey(),
   firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
-  /** Optional display name. Never required; the address always works. */
+  /**
+   * Optional display name. Never required and currently never written: the
+   * wallet address IS the identity (AGENTS.md non-goals -- no accounts). Kept
+   * for an ENS-style name if that turns out to be trivial.
+   */
   displayName: text("display_name"),
 });
 

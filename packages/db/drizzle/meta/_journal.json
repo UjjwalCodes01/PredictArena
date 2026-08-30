@@ -15,6 +15,20 @@
       "when": 1788029446488,
       "tag": "0001_greedy_king_bedlam",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788062742721,
+      "tag": "0002_sleepy_rumiko_fujikawa",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788062948810,
+      "tag": "0003_tiresome_sir_ram",
+      "breakpoints": true
     }
   ]
 }
