@@ -13,7 +13,7 @@ import type { WindowsResponse, WindowDto } from "@/lib/types";
 import { countdown, seriesLabel } from "@/lib/format";
 import { useServerClock, useTick } from "@/hooks/useServerClock";
 import { CallPanel } from "./CallPanel";
-import { Card, ErrorNote, Skeleton, Empty } from "./ui";
+import { Card, Panel, ErrorNote, Skeleton, Empty, LiveDot } from "./ui";
 
 const ASSETS = ["BTC", "ETH"] as const;
 /** The 5-minute series: long enough to decide, short enough to see it settle. */
@@ -56,19 +56,20 @@ export function WindowFeed({ onPlaced }: { onPlaced: () => void }) {
 
   return (
     <section aria-label="Place a call">
-      <div className="mb-3 flex gap-1" role="group" aria-label="Asset">
+      <div className="mb-3 flex items-center gap-1" role="group" aria-label="Asset">
         {ASSETS.map((a) => (
           <button
             key={a}
             onClick={() => setAsset(a)}
             aria-pressed={asset === a}
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-              asset === a ? "bg-ink text-bg" : "text-ink-soft hover:text-ink"
+            className={`rounded-sm px-3 py-1.5 font-[family-name:var(--font-mono)] text-xs uppercase tracking-wider transition-colors ${
+              asset === a ? "bg-accent text-accent-ink" : "text-ink-soft hover:text-ink"
             }`}
           >
             {a}
           </button>
         ))}
+        <span className="ml-auto"><LiveDot /></span>
       </div>
 
       {isPending ? (
@@ -96,25 +97,26 @@ export function WindowFeed({ onPlaced }: { onPlaced: () => void }) {
         </Card>
       ) : (
         <div className="space-y-3">
-          <Card className="p-4">
-            <div className="flex items-baseline justify-between gap-4">
+          <Panel
+            label={`${chosen.asset} · ${seriesLabel(chosen.intervalSec)} WINDOW`}
+            aside={<span className="label">{chosen.isTradable ? "OPEN" : "LOCKED"}</span>}
+            bodyClass="p-4 grid-bg"
+          >
+            <div className="flex items-end justify-between gap-4">
               <div>
-                <p className="text-sm text-ink-soft">
-                  {chosen.asset} · {seriesLabel(chosen.intervalSec)} window
-                </p>
-                <p className="tabular mt-1 text-3xl font-semibold tracking-tight text-ink">
+                <span className="label">TIME TO CLOSE</span>
+                <p className="tabular mt-1 text-4xl font-bold leading-none text-accent">
                   {countdown(secondsLeft)}
                 </p>
-                <p className="mt-0.5 text-xs text-ink-faint">until it closes</p>
               </div>
               <div className="text-right">
-                <p className="text-xs text-ink-faint">Opening price</p>
-                <p className="tabular mt-0.5 text-sm text-ink-soft">
-                  {chosen.strike === "0" ? "Setting" : chosen.strike}
+                <span className="label">OPENING PRICE</span>
+                <p className="tabular mt-1 text-sm text-ink-soft">
+                  {chosen.strike === "0" ? "SETTING" : chosen.strike}
                 </p>
               </div>
             </div>
-          </Card>
+          </Panel>
 
           <CallPanel window={chosen} secondsLeft={secondsLeft} onPlaced={handlePlaced} />
         </div>

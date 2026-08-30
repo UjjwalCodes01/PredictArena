@@ -1,66 +1,59 @@
 @import "tailwindcss";
 
 /*
- * Design tokens.
+ * Telemetry theme.
  *
- * One neutral ramp, one accent, and two outcome colours. Deliberately small:
- * a prediction app lives or dies on whether a countdown and a number are
- * instantly legible, not on decoration.
+ * Committed to a single dark look rather than following the system: this is an
+ * instrument panel, and an instrument panel that turns white in daylight is a
+ * different product. Every colour is painted explicitly for that reason.
  *
- * Up and Down are never distinguished by colour alone -- every use is paired
- * with the words "Up" or "Down", so the interface still works for a colourblind
- * user and in a screenshot.
+ * The palette is narrow on purpose -- near-black ground, one crimson accent,
+ * and a grey ramp. Colour is information here: red means the market, grey means
+ * chrome. Nothing is coloured for decoration.
  */
 @theme {
-  --color-bg: oklch(99% 0 0);
-  --color-surface: oklch(100% 0 0);
-  --color-border: oklch(92% 0.003 260);
-  --color-border-strong: oklch(85% 0.005 260);
-  --color-ink: oklch(22% 0.01 260);
-  --color-ink-soft: oklch(48% 0.012 260);
-  --color-ink-faint: oklch(64% 0.01 260);
+  --color-bg: oklch(14% 0.004 260);
+  --color-surface: oklch(18% 0.005 260);
+  --color-surface-2: oklch(21% 0.006 260);
+  --color-border: oklch(26% 0.007 260);
+  --color-border-strong: oklch(34% 0.009 260);
 
-  --color-accent: oklch(52% 0.18 262);
-  --color-accent-ink: oklch(99% 0 0);
-  --color-accent-soft: oklch(96% 0.03 262);
+  --color-ink: oklch(96% 0.002 260);
+  --color-ink-soft: oklch(70% 0.008 260);
+  --color-ink-faint: oklch(52% 0.008 260);
 
-  --color-up: oklch(52% 0.14 158);
-  --color-up-soft: oklch(96% 0.04 158);
-  --color-down: oklch(55% 0.18 22);
-  --color-down-soft: oklch(96% 0.04 22);
+  /* Crimson: the single accent, used for live data and primary actions. */
+  --color-accent: oklch(56% 0.23 25);
+  --color-accent-ink: oklch(98% 0 0);
+  --color-accent-soft: oklch(26% 0.09 25);
+  --color-accent-dim: oklch(40% 0.15 25);
 
-  --color-warn: oklch(58% 0.14 75);
-  --color-warn-soft: oklch(96% 0.05 75);
+  /*
+   * Outcomes. These exact values are not a taste call -- they were run through
+   * the palette validator against this surface and are the pair that passes
+   * every check: lightness band, chroma floor, CVD separation (deutan dE 13.4,
+   * comfortably past the 8 threshold), normal-vision separation, and contrast.
+   *
+   * Green/red is the pairing colourblind readers most often cannot split, so
+   * they are ALSO always paired with the words Up and Down. Colour never
+   * carries the meaning alone.
+   */
+  --color-up: oklch(64.5% 0.19 168);
+  --color-up-soft: oklch(24% 0.06 168);
+  --color-down: oklch(55% 0.21 25);
+  --color-down-soft: oklch(24% 0.08 25);
+
+  --color-warn: oklch(78% 0.15 80);
+  --color-warn-soft: oklch(26% 0.06 80);
 
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  @theme {
-    --color-bg: oklch(17% 0.008 260);
-    --color-surface: oklch(21% 0.009 260);
-    --color-border: oklch(28% 0.01 260);
-    --color-border-strong: oklch(36% 0.012 260);
-    --color-ink: oklch(96% 0.004 260);
-    --color-ink-soft: oklch(72% 0.012 260);
-    --color-ink-faint: oklch(55% 0.012 260);
-
-    --color-accent: oklch(66% 0.16 262);
-    --color-accent-ink: oklch(17% 0.008 260);
-    --color-accent-soft: oklch(28% 0.05 262);
-
-    --color-up: oklch(72% 0.15 158);
-    --color-up-soft: oklch(26% 0.05 158);
-    --color-down: oklch(70% 0.17 22);
-    --color-down-soft: oklch(27% 0.06 22);
-
-    --color-warn: oklch(76% 0.14 75);
-    --color-warn-soft: oklch(28% 0.06 75);
-  }
+html {
+  color-scheme: dark;
+  background: var(--color-bg);
 }
-
-html { color-scheme: light dark; }
 
 body {
   background: var(--color-bg);
@@ -69,14 +62,42 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Numbers that change every second must not reflow the layout around them. */
-.tabular { font-variant-numeric: tabular-nums; }
+/* Figures that change every second must not reflow the layout around them. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+}
 
-/* Visible focus for keyboard users, suppressed for pointer users. */
+/*
+ * Panel label. Small, spaced, upper-case monospace -- the convention every
+ * telemetry readout uses, and it makes a dense grid scannable without
+ * headings competing with the data.
+ */
+.label {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+}
+
+/* Faint grid, so panels read as instrument housing rather than plain boxes. */
+.grid-bg {
+  background-image:
+    linear-gradient(to right, oklch(100% 0 0 / 0.025) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(100% 0 0 / 0.025) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
 :focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: 2px;
+}
+
+::selection {
+  background: var(--color-accent-dim);
+  color: var(--color-ink);
 }
 
 @media (prefers-reduced-motion: reduce) {

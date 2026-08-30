@@ -1,18 +1,39 @@
 "use client";
 
 /**
- * The small shared pieces. Deliberately few and plain.
+ * Instrument-panel primitives.
  *
- * No emoji anywhere in the interface: they render inconsistently across
- * platforms, read badly to screen readers, and make a financial screen look
- * unserious. Meaning is carried by words.
+ * Everything is a titled panel with a small upper-case label, the way a
+ * telemetry readout is laid out: the label names the channel, the panel holds
+ * the data, and nothing competes for attention with the numbers.
+ *
+ * No emoji anywhere. Meaning is carried by words and by position.
  */
 import Image from "next/image";
 import type { ReactNode, ButtonHTMLAttributes } from "react";
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <div className={`rounded-md border border-border bg-surface ${className}`}>{children}</div>;
+}
+
+/** A panel with a channel label, and optionally a readout in the corner. */
+export function Panel({
+  label, aside, children, className = "", bodyClass = "p-4",
+}: {
+  label: string;
+  aside?: ReactNode;
+  children: ReactNode;
+  className?: string;
+  bodyClass?: string;
+}) {
   return (
-    <div className={`rounded-xl border border-border bg-surface ${className}`}>{children}</div>
+    <section className={`rounded-md border border-border bg-surface ${className}`}>
+      <header className="flex items-center justify-between gap-3 border-b border-border px-3 py-2">
+        <h2 className="label">{label}</h2>
+        {aside ? <div className="flex items-center gap-3">{aside}</div> : null}
+      </header>
+      <div className={bodyClass}>{children}</div>
+    </section>
   );
 }
 
@@ -23,11 +44,12 @@ export function Button({
   ...rest
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "secondary" | "ghost" }) {
   const base =
-    "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium " +
-    "transition-colors disabled:cursor-not-allowed disabled:opacity-45";
+    "inline-flex items-center justify-center gap-2 rounded-sm px-3.5 py-2 text-xs font-medium " +
+    "uppercase tracking-wider transition-colors disabled:cursor-not-allowed disabled:opacity-40 " +
+    "font-[family-name:var(--font-mono)]";
   const styles = {
-    primary: "bg-accent text-accent-ink hover:opacity-90",
-    secondary: "border border-border-strong bg-surface text-ink hover:border-ink-faint",
+    primary: "bg-accent text-accent-ink hover:brightness-110",
+    secondary: "border border-border-strong bg-surface-2 text-ink hover:border-ink-faint",
     ghost: "text-ink-soft hover:text-ink",
   } as const;
   return (
@@ -37,35 +59,52 @@ export function Button({
   );
 }
 
-/** A labelled figure. The unit is separated so numbers stay scannable. */
-export function Stat({ label, value, unit }: { label: string; value: ReactNode; unit?: string }) {
+/** Bracketed control, as used for stepping through records. */
+export function BracketButton({
+  children, ...rest
+}: ButtonHTMLAttributes<HTMLButtonElement> & { children: ReactNode }) {
+  return (
+    <button
+      className="label whitespace-nowrap px-1.5 py-1 text-ink-soft transition-colors hover:text-accent disabled:opacity-35"
+      {...rest}
+    >
+      [ {children} ]
+    </button>
+  );
+}
+
+/** A labelled figure. The unit is separated so the number stays scannable. */
+export function Stat({
+  label, value, unit, tone = "default",
+}: {
+  label: string;
+  value: ReactNode;
+  unit?: string;
+  tone?: "default" | "accent" | "up" | "down";
+}) {
+  const toneClass = {
+    default: "text-ink",
+    accent: "text-accent",
+    up: "text-up",
+    down: "text-down",
+  }[tone];
   return (
     <div>
-      <div className="text-xs text-ink-faint">{label}</div>
-      <div className="tabular mt-0.5 text-lg font-semibold text-ink">
+      <div className="label">{label}</div>
+      <div className={`tabular mt-1 text-lg font-semibold leading-none ${toneClass}`}>
         {value}
-        {unit ? <span className="ml-1 text-sm font-normal text-ink-soft">{unit}</span> : null}
+        {unit ? <span className="ml-1 text-xs font-normal text-ink-faint">{unit}</span> : null}
       </div>
     </div>
   );
 }
 
-/**
- * Loading placeholder.
- *
- * A shape the size of the content that is coming, so the layout does not jump
- * when it arrives. CLAUDE.md requires a loading state on every async view.
- */
+/** Loading placeholder shaped like the content that is coming. */
 export function Skeleton({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse rounded-md bg-border ${className}`} aria-hidden="true" />;
+  return <div className={`animate-pulse rounded-sm bg-border ${className}`} aria-hidden="true" />;
 }
 
-/**
- * Empty state.
- *
- * Required to look intentional rather than broken -- a cold-start leaderboard
- * is in the demo, and "nothing here yet" must read as a fact, not a failure.
- */
+/** Empty state. Must read as a fact, not a fault. */
 export function Empty({
   title, hint, action, image,
 }: { title: string; hint?: string; action?: ReactNode; image?: string }) {
@@ -75,9 +114,9 @@ export function Empty({
         <Image
           src={image}
           alt=""
-          width={96}
-          height={96}
-          className="mb-2 h-24 w-24 rounded-xl object-cover opacity-80"
+          width={88}
+          height={88}
+          className="mb-2 h-22 w-22 rounded-md object-cover opacity-40 grayscale"
         />
       ) : null}
       <p className="text-sm font-medium text-ink">{title}</p>
@@ -87,31 +126,18 @@ export function Empty({
   );
 }
 
-/**
- * Error state.
- *
- * Always shows what to DO. A bare "something went wrong" is a bug
- * (CLAUDE.md, error handling).
- */
+/** Error state. Always says what to do; a bare failure message is a bug. */
 export function ErrorNote({
-  title,
-  detail,
-  action,
-  onRetry,
-}: {
-  title: string;
-  detail?: string;
-  action?: string;
-  onRetry?: () => void;
-}) {
+  title, detail, action, onRetry,
+}: { title: string; detail?: string; action?: string; onRetry?: () => void }) {
   return (
-    <div role="alert" className="rounded-lg border border-warn/40 bg-warn-soft px-4 py-3">
+    <div role="alert" className="rounded-md border border-warn/40 bg-warn-soft/60 px-4 py-3">
       <p className="text-sm font-medium text-ink">{title}</p>
       {detail ? <p className="mt-1 text-sm text-ink-soft">{detail}</p> : null}
       {action ? <p className="mt-1 text-sm text-ink-soft">{action}</p> : null}
       {onRetry ? (
-        <button onClick={onRetry} className="mt-2 text-sm font-medium text-accent underline underline-offset-2">
-          Try again
+        <button onClick={onRetry} className="label mt-2 text-accent hover:brightness-125">
+          [ RETRY ]
         </button>
       ) : null}
     </div>
@@ -121,16 +147,31 @@ export function ErrorNote({
 /** Outcome pill. Colour is reinforced by the word, never replaced by it. */
 export function StatusPill({ status }: { status: "PENDING" | "WON" | "LOST" | "VOID" | "FAILED" }) {
   const map = {
-    PENDING: { text: "Pending", cls: "border-border-strong text-ink-soft" },
-    WON: { text: "Won", cls: "border-up/40 bg-up-soft text-up" },
-    LOST: { text: "Lost", cls: "border-down/40 bg-down-soft text-down" },
-    VOID: { text: "Void", cls: "border-border-strong bg-bg text-ink-soft" },
-    FAILED: { text: "Failed", cls: "border-warn/40 bg-warn-soft text-warn" },
+    PENDING: { text: "PENDING", cls: "border-border-strong text-ink-soft" },
+    WON: { text: "WON", cls: "border-up/50 bg-up-soft text-up" },
+    LOST: { text: "LOST", cls: "border-down/50 bg-down-soft text-down" },
+    VOID: { text: "VOID", cls: "border-border-strong bg-surface-2 text-ink-soft" },
+    FAILED: { text: "FAILED", cls: "border-warn/50 bg-warn-soft text-warn" },
   } as const;
   const s = map[status];
   return (
-    <span className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-medium ${s.cls}`}>
+    <span
+      className={`inline-flex rounded-sm border px-1.5 py-0.5 font-[family-name:var(--font-mono)] text-[0.625rem] font-medium uppercase tracking-wider ${s.cls}`}
+    >
       {s.text}
+    </span>
+  );
+}
+
+/** A small live indicator: a pulsing dot plus the word, never the dot alone. */
+export function LiveDot({ label = "LIVE" }: { label?: string }) {
+  return (
+    <span className="label inline-flex items-center gap-1.5 text-accent">
+      <span className="relative flex h-1.5 w-1.5">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-70" />
+        <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent" />
+      </span>
+      {label}
     </span>
   );
 }

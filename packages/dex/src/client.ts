@@ -4,7 +4,7 @@
  * Takes explicit config rather than reading env: a library that reads
  * `process.env` cannot run in a browser, and Phase 3 signs in the browser.
  */
-import { SomniaMarkets } from "@somnia-chain/markets-sdk";
+import { SomniaMarkets, SOMNIA_TESTNET_PRICE_FEED } from "@somnia-chain/markets-sdk";
 import { createPublicClient, http, erc20Abi } from "viem";
 import type { PublicClient, WalletClient, Account } from "viem";
 import {
@@ -30,6 +30,12 @@ export interface DexConfig {
   queue?: QueueOptions;
   /** How long `getMarkets()` caches for. Default 60s. */
   marketsTtlMs?: number;
+  /**
+   * Underlying BTC/ETH price feed. Defaults to the testnet oracle the SDK ships.
+   * Without it every price read throws rather than returning nothing, so it is
+   * configured up front instead of discovered at the call site.
+   */
+  priceFeedUrl?: string;
 }
 
 export interface DexClient {
@@ -73,6 +79,9 @@ export function createDexClient(config: DexConfig): DexClient {
     chain: SHANNON,
     ...(config.rpcWsUrl ? { wsRpcUrl: config.rpcWsUrl } : {}),
     addresses: TESTNET_ADDRESSES,
+    priceFeed: config.priceFeedUrl
+      ? { ...SOMNIA_TESTNET_PRICE_FEED, url: config.priceFeedUrl }
+      : SOMNIA_TESTNET_PRICE_FEED,
     ...(config.privateKey ? { privateKey: config.privateKey } : {}),
     ...(config.walletClient ? { walletClient: config.walletClient } : {}),
     ...(config.account ? { account: config.account } : {}),

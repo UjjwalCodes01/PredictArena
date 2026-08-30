@@ -19,6 +19,7 @@ import { ConnectButton } from "./Wallet";
 const PRIMARY = [
   { href: "/", label: "Play" },
   { href: "/markets", label: "Markets" },
+  { href: "/terminal", label: "Terminal" },
   { href: "/leaderboard", label: "Leaderboard" },
   { href: "/activity", label: "Activity" },
 ] as const;

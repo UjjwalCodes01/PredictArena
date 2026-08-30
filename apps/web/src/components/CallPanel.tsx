@@ -86,7 +86,8 @@ export function CallPanel({
     <Card className="overflow-hidden">
       {/* Step 1 - which way */}
       <div className="border-b border-border p-4">
-        <p className="mb-3 text-sm font-medium text-ink">
+        <span className="label">DIRECTION</span>
+        <p className="mb-3 mt-1 text-sm font-medium text-ink">
           Will {w.asset} close higher after {seriesLabel(w.intervalSec)}?
         </p>
         <div className="grid grid-cols-2 gap-3">
@@ -117,7 +118,8 @@ export function CallPanel({
       {/* Step 2 - how much */}
       {direction ? (
         <div className="border-b border-border p-4">
-          <p className="mb-3 text-sm font-medium text-ink">How much do you want to stake?</p>
+          <span className="label">STAKE</span>
+          <p className="mb-3 mt-1 text-sm font-medium text-ink">How much do you want to stake?</p>
           <div className="flex gap-2" role="group" aria-label="Stake amount">
             {STAKE_PRESETS.map((v) => (
               <button
@@ -125,7 +127,7 @@ export function CallPanel({
                 onClick={() => setStakeWhole(v)}
                 disabled={busy}
                 aria-pressed={stakeWhole === v}
-                className={`tabular flex-1 rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors disabled:opacity-45 ${
+                className={`tabular flex-1 rounded-sm border px-3 py-2.5 text-sm font-medium transition-colors disabled:opacity-45 ${
                   stakeWhole === v
                     ? "border-accent bg-accent-soft text-accent"
                     : "border-border-strong text-ink hover:border-ink-faint"
@@ -195,11 +197,14 @@ function DirectionButton({
         selected ? selectedRing : "border-border-strong hover:border-ink-faint"
       }`}
     >
-      <span className={`block text-base font-semibold ${labelTone}`}>{label}</span>
-      <span className="mt-0.5 block text-xs text-ink-faint">{hint}</span>
-      <span className="tabular mt-2 block text-sm text-ink-soft">
-        {price === null ? "No price" : `${percent(BigInt(price))} chance`}
+      <span className={`block font-[family-name:var(--font-mono)] text-sm font-bold uppercase tracking-wider ${labelTone}`}>
+        {label}
       </span>
+      <span className="mt-1 block text-xs leading-snug text-ink-faint">{hint}</span>
+      <span className={`tabular mt-2 block text-xl font-bold ${price === null ? "text-ink-faint" : labelTone}`}>
+        {price === null ? "—" : percent(BigInt(price))}
+      </span>
+      <span className="label mt-0.5 block">{price === null ? "NO QUOTE" : "IMPLIED CHANCE"}</span>
     </button>
   );
 }
