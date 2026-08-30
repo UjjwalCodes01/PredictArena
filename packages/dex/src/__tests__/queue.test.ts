@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { RequestQueue } from "../queue.js";
-import { DexError } from "../errors.js";
+import { RequestQueue } from "../queue";
+import { DexError } from "../errors";
 
 const noSleep = async (): Promise<void> => {};
 

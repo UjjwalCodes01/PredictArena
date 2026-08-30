@@ -19,5 +19,8 @@
     "packages/*/src/**/*.ts",
     "packages/*/drizzle.config.ts",
     "apps/*/src/**/*.ts"
+  ],
+  "exclude": [
+    "apps/web"
   ]
 }

@@ -19,11 +19,11 @@
 import { quoteBinaryStakeOverBook } from "@somnia-chain/markets-sdk";
 import type { BinaryBuySide, PlaceOrderResult, UnsignedOrder } from "@somnia-chain/markets-sdk";
 import { erc20Abi, keccak256, encodePacked } from "viem";
-import type { DexClient } from "./client.js";
-import { GAS_CEILING_WEI, LINKS, explorerTx } from "./config.js";
-import { DexError, asDexError } from "./errors.js";
-import { formatFixed } from "./money.js";
-import { MarketStatus, headroomSecFor, type Direction, type Window } from "./windows.js";
+import type { DexClient } from "./client";
+import { GAS_CEILING_WEI, LINKS, explorerTx } from "./config";
+import { DexError, asDexError } from "./errors";
+import { formatFixed } from "./money";
+import { MarketStatus, headroomSecFor, type Direction, type Window } from "./windows";
 
 const sideFor = (direction: Direction): BinaryBuySide => (direction === "UP" ? "BUY_YES" : "BUY_NO");
 
@@ -95,6 +95,29 @@ export async function quoteCall(
     escrow: quote.escrow,
     // Every winning contract redeems for exactly one unit of collateral.
     maxPayout: quote.quantity,
+  };
+}
+
+/** Best available cost per contract on each side. Null when a side is empty. */
+export interface TopOfBook {
+  readonly up: bigint | null;
+  readonly down: bigint | null;
+}
+
+/**
+ * Cheapest ask on each outcome, read from the chain's book.
+ *
+ * The feed needs a price per window without pricing a specific stake, and this
+ * is one read rather than two quotes. Exposed here so the web app never has to
+ * reach past this package to the SDK (CLAUDE.md rule 4).
+ */
+export async function getTopOfBook(client: DexClient, pool: `0x${string}`): Promise<TopOfBook> {
+  const book = await client.queue.run(() =>
+    client.exchange.client.getBinaryOrderBook(pool, { depth: 1 }),
+  );
+  return {
+    up: book.yesAsks?.[0]?.price ?? null,
+    down: book.noAsks?.[0]?.price ?? null,
   };
 }
 

@@ -7,7 +7,7 @@
  */
 import { getWindows, MarketStatus, type DexClient } from "@predictarena/dex";
 import { upsertWindow, weekIdForClose, type Database, type NewWindowRow } from "@predictarena/db";
-import { log } from "./log.js";
+import { log } from "./log";
 
 /** Map the on-chain numeric status onto the row enum we store. */
 function windowStatusFor(onchainStatus: number, isResolved: boolean, isVoided: boolean): NewWindowRow["status"] {
@@ -17,7 +17,7 @@ function windowStatusFor(onchainStatus: number, isResolved: boolean, isVoided: b
   return "OPEN";
 }
 
-import type { IngestTarget } from "./ingest-calls.js";
+import type { IngestTarget } from "./ingest-calls";
 
 export type IngestedWindow = IngestTarget;
 

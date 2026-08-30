@@ -12,7 +12,7 @@
  * clients recovering from the same blip does not resynchronise into a thundering
  * herd.
  */
-import { DexError, asDexError } from "./errors.js";
+import { DexError, asDexError } from "./errors";
 
 export interface QueueOptions {
   /** Simultaneous in-flight calls. 1 serialises completely. */

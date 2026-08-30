@@ -10,7 +10,7 @@
  */
 import { SOMNIA_TESTNET_ADDRESSES, DEFAULT_FEES } from "@somnia-chain/markets-sdk";
 import { somniaShannon } from "@somnia-chain/markets-sdk/chains";
-import { DexError } from "./errors.js";
+import { DexError } from "./errors";
 
 /** Somnia Shannon. The only chain this project may touch. */
 export const TESTNET_CHAIN_ID = 50312 as const;

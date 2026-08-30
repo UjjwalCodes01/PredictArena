@@ -12,7 +12,7 @@
 import {
   CALIBRATION_MIN_SETTLED, POINTS_PER_WIN,
   type ScorableCall, type Standing,
-} from "./types.js";
+} from "./types";
 
 /**
  * Streak multiplier, expressed times ten so all arithmetic stays integer and no

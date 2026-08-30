@@ -6,7 +6,7 @@
  * market-making bot appearing on the leaderboard.
  */
 import { describe, it, expect } from "vitest";
-import { aggregateFills, directionOf, type FillLike } from "../ingest-calls.js";
+import { aggregateFills, directionOf, type FillLike } from "../ingest-calls";
 
 const lower = (a: string): string => a.toLowerCase();
 

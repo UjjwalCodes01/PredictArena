@@ -6,7 +6,7 @@
  * an inline expression.
  */
 import { describe, it, expect } from "vitest";
-import { isoWeekId, weekIdForClose, weekStartUtc } from "../week.js";
+import { isoWeekId, weekIdForClose, weekStartUtc } from "../week";
 
 const at = (iso: string): number => Math.floor(new Date(iso).getTime() / 1000);
 

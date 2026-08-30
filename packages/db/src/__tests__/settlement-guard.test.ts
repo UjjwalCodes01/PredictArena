@@ -11,8 +11,8 @@
  * prove the guard fires BEFORE any row is touched.
  */
 import { describe, it, expect } from "vitest";
-import { settleCallsForWindow } from "../queries.js";
-import type { Database } from "../client.js";
+import { settleCallsForWindow } from "../queries";
+import type { Database } from "../client";
 
 /** Any use of this is a test failure: nothing should reach the database. */
 const unreachableDb = new Proxy({}, {

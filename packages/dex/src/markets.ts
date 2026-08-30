@@ -6,9 +6,9 @@
  * id the bot kit documents as *mainnet* was among them, on testnet. So a venue
  * id is never pinned and never used as a network signal.
  */
-import type { DexClient } from "./client.js";
-import { TESTNET_ADDRESSES } from "./config.js";
-import { asDexError, DexError } from "./errors.js";
+import type { DexClient } from "./client";
+import { TESTNET_ADDRESSES } from "./config";
+import { asDexError, DexError } from "./errors";
 
 export interface VenueInfo {
   readonly venueId: string;

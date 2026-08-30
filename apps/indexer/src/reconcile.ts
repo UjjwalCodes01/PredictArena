@@ -14,7 +14,7 @@ import {
   getOverdueCalls, getNonTerminalCalls, settleCallsForWindow, markWindowSettled,
   type Database,
 } from "@predictarena/db";
-import { log } from "./log.js";
+import { log } from "./log";
 
 export interface ReconcileResult {
   checked: number;

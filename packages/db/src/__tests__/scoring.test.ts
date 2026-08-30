@@ -6,8 +6,8 @@
  * must be recomputable and idempotent from raw calls alone.
  */
 import { describe, it, expect } from "vitest";
-import { computeStandings, streakMultiplierX10, pointsForWin } from "../scoring.js";
-import { POINTS_PER_WIN, type CallStatus, type ScorableCall } from "../types.js";
+import { computeStandings, streakMultiplierX10, pointsForWin } from "../scoring";
+import { POINTS_PER_WIN, type CallStatus, type ScorableCall } from "../types";
 
 const WEEK = "2026-W35";
 let seq = 0;

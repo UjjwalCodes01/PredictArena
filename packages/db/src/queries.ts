@@ -7,11 +7,11 @@
  * 45 seconds and again on every startup.
  */
 import { and, desc, eq, inArray, lt, or, sql } from "drizzle-orm";
-import type { Database } from "./client.js";
-import { calls, wallets, windows, syncState } from "./schema.js";
-import type { NewCallRow, NewWindowRow, CallRow, WindowRow } from "./schema.js";
-import { computeStandings } from "./scoring.js";
-import type { CallStatus, ScorableCall, Standing } from "./types.js";
+import type { Database } from "./client";
+import { calls, wallets, windows, syncState } from "./schema";
+import type { NewCallRow, NewWindowRow, CallRow, WindowRow } from "./schema";
+import { computeStandings } from "./scoring";
+import type { CallStatus, ScorableCall, Standing } from "./types";
 
 /** Statuses that will never change again. Everything else is the reconciler's job. */
 export const TERMINAL_STATUSES: readonly CallStatus[] = ["WON", "LOST", "VOID", "FAILED"];

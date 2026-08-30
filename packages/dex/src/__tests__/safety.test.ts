@@ -3,8 +3,8 @@
  * tested rather than assumed.
  */
 import { describe, it, expect } from "vitest";
-import { assertTestnetConfig, MAINNET_HOSTS, TESTNET_CHAIN_ID } from "../config.js";
-import { DexError } from "../errors.js";
+import { assertTestnetConfig, MAINNET_HOSTS, TESTNET_CHAIN_ID } from "../config";
+import { DexError } from "../errors";
 
 const shannon = { chainId: TESTNET_CHAIN_ID, urls: ["https://dream-rpc.somnia.network"] };
 

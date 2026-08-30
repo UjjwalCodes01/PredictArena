@@ -10,10 +10,10 @@
  * redemption, which is exactly the failure this module exists to prevent.
  */
 import { erc20Abi } from "viem";
-import type { DexClient } from "./client.js";
-import { explorerTx } from "./config.js";
-import { DexError, asDexError } from "./errors.js";
-import { MarketStatus, directionFor, outcomeIndexFor, type Direction } from "./windows.js";
+import type { DexClient } from "./client";
+import { explorerTx } from "./config";
+import { DexError, asDexError } from "./errors";
+import { MarketStatus, directionFor, outcomeIndexFor, type Direction } from "./windows";
 
 /** The only legal outcome values. Booleans are forbidden. */
 export type PositionStatus = "PENDING" | "WON" | "LOST" | "VOID" | "FAILED";

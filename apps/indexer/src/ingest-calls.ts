@@ -19,7 +19,7 @@
 import type { DexClient } from "@predictarena/dex";
 import { upsertCall, touchWallet, weekIdForClose, normalizeAddress, type Database, type NewCallRow } from "@predictarena/db";
 import type { CallStatus, Direction } from "@predictarena/db";
-import { log } from "./log.js";
+import { log } from "./log";
 
 /** Page size per fills request. Pagination continues until a short page. */
 const FILLS_PAGE = 200;

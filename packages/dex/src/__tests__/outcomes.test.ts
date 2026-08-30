@@ -6,9 +6,9 @@
  * COMMON outcome on Shannon, so every case is pinned here.
  */
 import { describe, it, expect } from "vitest";
-import { statusFor, type Settlement } from "../positions.js";
-import { headroomSecFor, outcomeIndexFor, directionFor, MarketStatus, type Direction } from "../windows.js";
-import { idempotencyKey } from "../orders.js";
+import { statusFor, type Settlement } from "../positions";
+import { headroomSecFor, outcomeIndexFor, directionFor, MarketStatus, type Direction } from "../windows";
+import { idempotencyKey } from "../orders";
 
 const settlement = (over: Partial<Settlement>): Settlement => ({
   marketId: "0x00",

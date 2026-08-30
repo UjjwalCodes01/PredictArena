@@ -8,6 +8,9 @@
     "node": ">=20"
   },
   "scripts": {
+    "dev": "pnpm -F @predictarena/web dev",
+    "build": "pnpm -F @predictarena/web build",
+    "dev:indexer": "tsx apps/indexer/src/main.ts",
     "wallets": "tsx scripts/gen-wallets.ts",
     "faucet": "tsx scripts/faucet.ts",
     "doctor": "tsx scripts/doctor.ts",
@@ -20,8 +23,7 @@
     "db:generate": "pnpm -F @predictarena/db generate",
     "db:migrate": "pnpm -F @predictarena/db migrate",
     "db:check": "tsx scripts/db-check.ts",
-    "indexer": "tsx apps/indexer/src/main.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && pnpm -F @predictarena/web typecheck",
     "lint": "eslint . && tsx scripts/lint-no-float-money.ts && tsx scripts/lint-no-mainnet.ts",
     "test": "vitest run"
   },

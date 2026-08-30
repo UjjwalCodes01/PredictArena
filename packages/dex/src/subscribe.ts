@@ -11,9 +11,9 @@
  * a reconcile pass runs on a timer regardless, and again immediately after every
  * reconnect to cover the gap.
  */
-import type { DexClient } from "./client.js";
-import { asDexError, type DexError } from "./errors.js";
-import { getSettlement, type Settlement } from "./positions.js";
+import type { DexClient } from "./client";
+import { asDexError, type DexError } from "./errors";
+import { getSettlement, type Settlement } from "./positions";
 
 export interface SubscribeOptions {
   /** Windows to watch. Settlements for these are reported. */

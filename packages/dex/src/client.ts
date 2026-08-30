@@ -10,10 +10,10 @@ import type { PublicClient, WalletClient, Account } from "viem";
 import {
   SHANNON, TESTNET_ADDRESSES, TESTNET_CHAIN_ID, MAINNET_CHAIN_ID, MAINNET_COLLATERAL,
   EXPECTED_COLLATERAL_DECIMALS, EXPECTED_COLLATERAL_SYMBOL, ELWOOD_CHAIN_ID, assertTestnetConfig,
-} from "./config.js";
-import { DexError, asDexError } from "./errors.js";
-import { RequestQueue, type QueueOptions } from "./queue.js";
-import { ServerClock } from "./time.js";
+} from "./config";
+import { DexError, asDexError } from "./errors";
+import { RequestQueue, type QueueOptions } from "./queue";
+import { ServerClock } from "./time";
 
 export interface DexConfig {
   /** Envio/Hasura GraphQL endpoint serving Shannon binary markets. */

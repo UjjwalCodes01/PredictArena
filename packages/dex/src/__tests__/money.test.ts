@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   parseAmount, formatAmount, formatFixed, priceToPercent, probabilityToPrice,
   quantizeDown, quantizeUp, formatStt, MoneyError,
-} from "../money.js";
+} from "../money";
 
 const USDC = 6;
 

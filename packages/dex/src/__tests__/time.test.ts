@@ -3,7 +3,7 @@
  * cutoffs. These tests simulate a skewed machine, which is the whole point.
  */
 import { describe, it, expect } from "vitest";
-import { ServerClock } from "../time.js";
+import { ServerClock } from "../time";
 
 function fakeSource(opts: { chainSec: number; localMs: number; latencyMs?: number }) {
   const state = { ...opts, latencyMs: opts.latencyMs ?? 0 };

@@ -10,8 +10,8 @@
  *     chain-corrected `ServerClock`.
  */
 import type { BinaryMarket } from "@somnia-chain/markets-sdk";
-import type { DexClient } from "./client.js";
-import { asDexError } from "./errors.js";
+import type { DexClient } from "./client";
+import { asDexError } from "./errors";
 
 /** On-chain market status. Numeric values are the contract's, not ours. */
 export const MarketStatus = {

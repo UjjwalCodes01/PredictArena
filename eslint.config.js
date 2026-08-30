@@ -4,7 +4,17 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["node_modules/**", "dist/**", ".next/**", "artifacts/**", "**/*.d.ts"],
+    // Recursive globs: these directories exist inside every workspace package,
+    // not just at the root. Without the leading **/ eslint walked apps/web/.next
+    // and reported twenty-four thousand problems in generated output.
+    ignores: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/.next/**",
+      "**/artifacts/**",
+      "**/*.d.ts",
+      "**/next-env.d.ts",
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

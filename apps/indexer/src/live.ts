@@ -14,7 +14,7 @@
  *    the gap while we were disconnected is exactly where an event hides.
  */
 import type { DexClient } from "@predictarena/dex";
-import { log } from "./log.js";
+import { log } from "./log";
 
 export interface LiveTailOptions {
   /** Called when the tail suggests something changed. Debounced. */

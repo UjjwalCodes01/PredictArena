@@ -18,11 +18,11 @@ import {
   assertLiveNetwork, createDexClient, DexError, type DexClient,
 } from "@predictarena/dex";
 import { createDb, setSyncState, currentWeekId, getStandings, type Database } from "@predictarena/db";
-import { log } from "./log.js";
-import { ingestWindows } from "./ingest.js";
-import { ingestCalls } from "./ingest-calls.js";
-import { reconcile } from "./reconcile.js";
-import { startLiveTail } from "./live.js";
+import { log } from "./log";
+import { ingestWindows } from "./ingest";
+import { ingestCalls } from "./ingest-calls";
+import { reconcile } from "./reconcile";
+import { startLiveTail } from "./live";
 
 // One .env at the repo root; this app lives two levels down.
 loadDotenv({ path: resolve(import.meta.dirname, "..", "..", "..", ".env"), quiet: true });
