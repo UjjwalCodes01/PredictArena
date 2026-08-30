@@ -26,10 +26,26 @@ jobs:
       # pin said 10 while the repo was developed on 11.
       - uses: pnpm/action-setup@v6
 
+      # No `cache: pnpm` here, deliberately.
+      #
+      # setup-node keys the pnpm store cache on the LOCKFILE hash. When this
+      # workflow moved from pnpm 10 to 11 the lockfile did not change, so every
+      # run kept restoring a store laid out by the previous major and the
+      # install failed on a tree that installs cleanly everywhere else. A cache
+      # that survives the thing it should be keyed on is worse than no cache:
+      # install is a few seconds either way, well inside the 2-minute budget.
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-          cache: pnpm
+
+      # Printed before anything can fail, so a red run says WHICH toolchain
+      # produced it instead of leaving us to guess from a bare exit code.
+      - name: Toolchain
+        run: |
+          echo "node    $(node --version)"
+          echo "pnpm    $(pnpm --version)"
+          echo "corepack $(corepack --version 2>/dev/null || echo 'n/a')"
+          echo "packageManager: $(node -p "require('./package.json').packageManager ?? 'unset'")"
 
       - name: Install
         run: pnpm install --frozen-lockfile
