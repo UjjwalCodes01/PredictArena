@@ -20,10 +20,19 @@
 
   --color-ink: oklch(96% 0.002 260);
   --color-ink-soft: oklch(70% 0.008 260);
-  --color-ink-faint: oklch(52% 0.008 260);
+  /* Was 52%, which measured 3.4:1 against the surface — under the 4.5:1 that
+     small text needs. Raised until it passes. Faint is a role, not an excuse
+     for text nobody can read. */
+  --color-ink-faint: oklch(62% 0.008 260);
 
   /* Crimson: the single accent, used for live data and primary actions. */
   --color-accent: oklch(56% 0.23 25);
+  /*
+   * The same crimson is unreadable AS TEXT on the soft accent background — the
+   * active nav link measured 3.08:1. This lighter step is for text on that
+   * background only; the accent itself stays put so buttons keep their colour.
+   */
+  --color-accent-text: oklch(74% 0.16 25);
   --color-accent-ink: oklch(98% 0 0);
   --color-accent-soft: oklch(26% 0.09 25);
   --color-accent-dim: oklch(40% 0.15 25);

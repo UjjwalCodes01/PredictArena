@@ -11,13 +11,14 @@
   "dependencies": {
     "@predictarena/db": "workspace:*",
     "@predictarena/dex": "workspace:*",
+    "@predictarena/indexer": "workspace:*",
     "@tanstack/react-query": "^5.102.8",
+    "dotenv": "^17.2.3",
     "next": "^16.3.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "viem": "^2.40.0",
-    "wagmi": "^3.7.7",
-    "dotenv": "^17.2.3"
+    "wagmi": "^3.7.7"
   },
   "devDependencies": {
     "@types/react": "^19.2.18",

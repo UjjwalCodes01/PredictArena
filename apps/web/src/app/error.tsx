@@ -1,5 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
+import { report } from "@/components/ErrorReporter";
+
 /**
  * Route-level error boundary. Required by CLAUDE.md's UI standards: no screen
  * may white-screen, and every failure has to say what to do next.
@@ -7,6 +10,12 @@
 export default function ErrorBoundary({
   error, reset,
 }: { error: Error & { digest?: string }; reset: () => void }) {
+  // A boundary that only shows a friendly page hides the fault from us. Report
+  // it once, then show the friendly page.
+  useEffect(() => {
+    report(error.message, error.stack, error.digest);
+  }, [error]);
+
   return (
     <div role="alert" className="py-16 text-center">
       <h1 className="text-lg font-semibold text-ink">Something did not load</h1>

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { setSyncState } from "@predictarena/db";
-import { ingestWindows } from "../../../../../../indexer/src/ingest";
-import { ingestCalls, catchUpClosedWindows } from "../../../../../../indexer/src/ingest-calls";
-import { reconcile } from "../../../../../../indexer/src/reconcile";
+import {
+  ingestWindows, ingestCalls, catchUpClosedWindows, reconcile,
+} from "@predictarena/indexer";
 import { serverDb, serverDex } from "@/lib/server";
 
 export const dynamic = "force-dynamic";

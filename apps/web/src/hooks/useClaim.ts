@@ -13,7 +13,7 @@
  */
 import { useCallback, useRef, useState } from "react";
 import { useAccount, useWalletClient } from "wagmi";
-import { redeem, DexError, type Direction } from "@predictarena/dex";
+import type { Direction } from "@predictarena/dex";
 import { getWalletDexClient } from "@/lib/dexClient";
 
 
@@ -57,7 +57,10 @@ export function useClaim() {
       setPhase({ kind: "claiming", marketId });
 
       try {
-        const dex = getWalletDexClient(walletClient, address);
+        const [{ redeem }, dex] = await Promise.all([
+          import("@predictarena/dex"),
+          getWalletDexClient(walletClient, address),
+        ]);
 
         const result = await redeem(dex, {
           marketId: marketId as `0x${string}`,
@@ -88,6 +91,7 @@ export function useClaim() {
           setPhase({ kind: "cancelled" });
           return;
         }
+        const { DexError } = await import("@predictarena/dex");
         if (e instanceof DexError) {
           setPhase({
             kind: "error",

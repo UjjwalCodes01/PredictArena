@@ -11,7 +11,7 @@
  */
 import { useQuery } from "@tanstack/react-query";
 import { useAccount } from "wagmi";
-import { getBalances, type Balances } from "@predictarena/dex";
+import type { Balances } from "@predictarena/dex";
 import { getReadClient } from "@/lib/dexClient";
 
 
@@ -23,7 +23,11 @@ export function useBalances(pool?: `0x${string}`) {
     queryFn: async () => {
       // Shared read client: constructing one per poll leaked a client every
       // twenty seconds and eventually froze the tab.
-      return getBalances(getReadClient(), address as `0x${string}`, pool);
+      const [{ getBalances }, dex] = await Promise.all([
+        import("@predictarena/dex"),
+        getReadClient(),
+      ]);
+      return getBalances(dex, address as `0x${string}`, pool);
     },
     enabled: Boolean(address) && isConnected,
     // Balances move when the user funds a wallet or places a call. Often enough

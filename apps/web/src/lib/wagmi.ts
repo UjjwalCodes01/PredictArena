@@ -9,7 +9,10 @@
  */
 import { http, createConfig, createStorage, cookieStorage } from "wagmi";
 import { injected, walletConnect } from "wagmi/connectors";
-import { SHANNON, TESTNET_CHAIN_ID } from "@predictarena/dex";
+// The `chain` subpath, NOT the index. The index reaches the whole venue SDK,
+// and this module is loaded by every page through the providers — so importing
+// it from there put ~1.6MB of exchange client in front of a leaderboard view.
+import { SHANNON, TESTNET_CHAIN_ID } from "@predictarena/dex/chain";
 
 export const RPC_URL = process.env["NEXT_PUBLIC_RPC_HTTP_URL"] ?? "https://dream-rpc.somnia.network";
 

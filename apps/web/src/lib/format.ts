@@ -4,7 +4,11 @@
  * Amounts stay bigint everywhere else (CLAUDE.md hard rule 3); this module is
  * the display edge the rule carves out.
  */
-import { formatFixed, priceToPercent } from "@predictarena/dex";
+// Imported from the package's `money` subpath, NOT its index. These are pure
+// arithmetic helpers; reaching them through the index pulled the entire venue
+// SDK into the initial JavaScript bundle on every page — including the
+// leaderboard, which never touches a wallet.
+import { formatFixed, priceToPercent } from "@predictarena/dex/money";
 
 export const COLLATERAL_DECIMALS = 6;
 export const COLLATERAL_SYMBOL = "tUSDC";

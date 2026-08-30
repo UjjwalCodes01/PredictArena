@@ -1,0 +1,18 @@
+# Fly.io. `fly launch --no-deploy` then `fly deploy` from the repo root.
+app = "predictarena-indexer"
+primary_region = "sin"
+
+[build]
+  dockerfile = "apps/indexer/Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+
+# No [http_service]: this process serves no traffic. It must simply stay alive,
+# so there is nothing to scale to zero on.
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+
+[deploy]
+  strategy = "immediate"

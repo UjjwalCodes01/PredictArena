@@ -76,6 +76,9 @@ importers:
       '@predictarena/dex':
         specifier: workspace:*
         version: link:../../packages/dex
+      '@predictarena/indexer':
+        specifier: workspace:*
+        version: link:../indexer
       '@tanstack/react-query':
         specifier: ^5.102.8
         version: 5.102.8(react@19.2.8)

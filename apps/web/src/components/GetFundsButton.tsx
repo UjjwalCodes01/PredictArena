@@ -15,7 +15,7 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAccount, useWalletClient } from "wagmi";
-import { mintCollateral, DexError } from "@predictarena/dex";
+
 import { getWalletDexClient } from "@/lib/dexClient";
 import { amount as fmt } from "@/lib/format";
 import { Button } from "./ui";
@@ -39,7 +39,10 @@ export function GetFundsButton({ compact = false }: { compact?: boolean }) {
     setError(null);
     setDone(null);
     try {
-      const dex = getWalletDexClient(walletClient, address);
+      const [{ mintCollateral }, dex] = await Promise.all([
+        import("@predictarena/dex"),
+        getWalletDexClient(walletClient, address),
+      ]);
       const { minted } = await mintCollateral(dex, MINT_WHOLE);
       setDone(minted);
       // The balance strip and the stake presets both read this.
@@ -49,7 +52,7 @@ export function GetFundsButton({ compact = false }: { compact?: boolean }) {
       const msg = e instanceof Error ? e.message : "";
       if (/rejected|denied/i.test(msg)) {
         setError(null);
-      } else if (e instanceof DexError) {
+      } else if (e instanceof (await import("@predictarena/dex")).DexError) {
         setError({ message: e.message, ...(e.action ? { action: e.action } : {}) });
       } else {
         setError({ message: "Could not reach the faucet.", action: "Try again in a moment." });

@@ -51,7 +51,7 @@ export function SiteHeader() {
                     href={item.href}
                     aria-current={active ? "page" : undefined}
                     className={`block whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm transition-colors ${
-                      active ? "bg-accent-soft font-medium text-accent" : "text-ink-soft hover:text-ink"
+                      active ? "bg-accent-soft font-medium text-accent-text" : "text-ink-soft hover:text-ink"
                     }`}
                   >
                     {item.label}
@@ -80,7 +80,7 @@ export function SiteHeader() {
                   href={item.href}
                   aria-current={active ? "page" : undefined}
                   className={`block whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm transition-colors ${
-                    active ? "bg-accent-soft font-medium text-accent" : "text-ink-soft hover:text-ink"
+                    active ? "bg-accent-soft font-medium text-accent-text" : "text-ink-soft hover:text-ink"
                   }`}
                 >
                   {item.label}

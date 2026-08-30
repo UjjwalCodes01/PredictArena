@@ -1,0 +1,59 @@
+# Keeps the projection fresh when the indexer daemon is not hosted anywhere.
+#
+# Vercel's Hobby plan caps cron frequency at once per day, which is useless for
+# a league whose windows close every five minutes. GitHub's scheduler allows
+# every five minutes and is free on a public repository, so it drives the same
+# endpoint the daemon's loops would.
+#
+# This is a FALLBACK. The daemon tails live chain events and reacts in seconds;
+# this reacts on a timer and only while GitHub feels like running it (scheduled
+# workflows are best-effort and get delayed under load). Prefer hosting the
+# daemon — see apps/indexer/Dockerfile.
+name: keep-fresh
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+# A slow run must never stack up behind the previous one.
+concurrency:
+  group: keep-fresh
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Drive one ingest cycle
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "APP_URL or CRON_SECRET is unset — add them as repository secrets."
+            echo "Skipping rather than failing, so the schedule does not spam failures."
+            exit 0
+          fi
+
+          # --fail-with-body so a 5xx is a failed step AND the reason is visible.
+          curl --fail-with-body --silent --show-error --max-time 120 \
+               --header "Authorization: Bearer $CRON_SECRET" \
+               "$APP_URL/api/cron/ingest" | tee response.json
+
+          echo
+          # A 200 with ok:false still means the cycle did not do its job.
+          if ! grep -q '"ok":true' response.json; then
+            echo "Ingest cycle reported a failure."
+            exit 1
+          fi
+
+      - name: Report health
+        if: always()
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+        run: |
+          [ -z "$APP_URL" ] && exit 0
+          # Informational: shows in the run log whether anything else is degraded.
+          curl --silent --max-time 60 "$APP_URL/api/health" || true

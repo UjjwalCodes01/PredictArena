@@ -17,8 +17,25 @@
  *  - a READ client with no wallet, for balances and quotes;
  *  - a WALLET client, rebuilt only when the connected account actually changes.
  */
-import { createDexClient, type DexClient } from "@predictarena/dex";
+import type { DexClient } from "@predictarena/dex";
 import { RPC_URL } from "./wagmi";
+
+/**
+ * The venue SDK is loaded ON DEMAND, not at import time.
+ *
+ * Statically importing `createDexClient` put ~535KB of exchange client and
+ * elliptic-curve code into the bundle EVERY page downloads — including the
+ * leaderboard, which never constructs a client. Lighthouse measured 770ms of
+ * blocking time and scored performance 76.
+ *
+ * A dynamic import moves it to its own chunk, fetched the first time someone
+ * actually touches a wallet. The cost is that these accessors are async; the
+ * benefit is that reading a leaderboard no longer pays for a trading engine.
+ */
+async function loadFactory(): Promise<typeof import("@predictarena/dex").createDexClient> {
+  const mod = await import("@predictarena/dex");
+  return mod.createDexClient;
+}
 
 const INDEXER_URL =
   process.env["NEXT_PUBLIC_INDEXER_URL"] ?? "https://dev.smk.somnia.host/v1/graphql";
@@ -26,8 +43,11 @@ const INDEXER_URL =
 let readClient: DexClient | null = null;
 
 /** Read-only client. No wallet, so it is safe to share across every caller. */
-export function getReadClient(): DexClient {
-  readClient ??= createDexClient({ indexerUrl: INDEXER_URL, rpcHttpUrl: RPC_URL });
+export async function getReadClient(): Promise<DexClient> {
+  if (!readClient) {
+    const createDexClient = await loadFactory();
+    readClient ??= createDexClient({ indexerUrl: INDEXER_URL, rpcHttpUrl: RPC_URL });
+  }
   return readClient;
 }
 
@@ -39,10 +59,10 @@ let walletClientCache: { account: string; client: DexClient } | null = null;
  * Rebuilt only when the account changes — and the previous one is closed first,
  * so switching wallets does not leave the old client's connections open.
  */
-export function getWalletDexClient(
+export async function getWalletDexClient(
   walletClient: unknown,
   account: `0x${string}`,
-): DexClient {
+): Promise<DexClient> {
   const key = account.toLowerCase();
   if (walletClientCache?.account === key) return walletClientCache.client;
 
@@ -54,6 +74,7 @@ export function getWalletDexClient(
     }
   }
 
+  const createDexClient = await loadFactory();
   const client = createDexClient({
     indexerUrl: INDEXER_URL,
     rpcHttpUrl: RPC_URL,

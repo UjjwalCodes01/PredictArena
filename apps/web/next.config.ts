@@ -13,7 +13,7 @@ loadEnv({ path: resolve(process.cwd(), "..", "..", ".env"), quiet: true });
 const config: NextConfig = {
   reactStrictMode: true,
   // The workspace packages ship TypeScript source, not a build step.
-  transpilePackages: ["@predictarena/dex", "@predictarena/db"],
+  transpilePackages: ["@predictarena/dex", "@predictarena/db", "@predictarena/indexer"],
   typedRoutes: true,
   images: { formats: ["image/avif", "image/webp"] },
   // Next 16 writes its own AGENTS.md / CLAUDE.md into the app directory. This

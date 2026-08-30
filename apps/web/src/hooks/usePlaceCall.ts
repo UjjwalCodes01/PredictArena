@@ -17,10 +17,7 @@
  */
 import { useCallback, useRef, useState } from "react";
 import { useAccount, useWalletClient } from "wagmi";
-import {
-  prepareCall, getWindows, idempotencyKey, DexError,
-  type Direction, type Window as DexWindow,
-} from "@predictarena/dex";
+import type { Direction, Window as DexWindow } from "@predictarena/dex";
 import { getWalletDexClient } from "@/lib/dexClient";
 import { addPending } from "@/lib/pending";
 
@@ -68,7 +65,13 @@ export function usePlaceCall() {
       setPhase({ kind: "preparing" });
 
       try {
-        const dex = getWalletDexClient(walletClient, address);
+        // The SDK arrives with the client, on the first call — not in the bundle
+        // every page downloads.
+        const [sdk, dex] = await Promise.all([
+          import("@predictarena/dex"),
+          getWalletDexClient(walletClient, address),
+        ]);
+        const { prepareCall, getWindows, idempotencyKey, DexError } = sdk;
 
         // Re-read the window at click time. It may have locked while the user
         // was deciding, and placing into a locked window wastes their gas.
@@ -161,8 +164,16 @@ export function usePlaceCall() {
           setPhase({ kind: "cancelled" });
           return;
         }
+        // The SDK may not have loaded if the failure happened before its
+        // import resolved, so it is fetched here rather than assumed present.
+        const { DexError } = await import("@predictarena/dex");
         if (e instanceof DexError) {
-          setPhase({ kind: "error", code: e.code, message: e.message, ...(e.action ? { action: e.action } : {}) });
+          setPhase({
+            kind: "error",
+            code: e.code,
+            message: e.message,
+            ...(e.action ? { action: e.action } : {}),
+          });
           return;
         }
         setPhase({
