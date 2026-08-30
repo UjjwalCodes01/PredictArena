@@ -137,6 +137,48 @@ export function isUnfillable(e: unknown): boolean {
   return /immediateorcancel|\bioc\b/i.test(String(e));
 }
 
+/**
+ * Mint test collateral to the connected wallet.
+ *
+ * The testnet tUSDC contract exposes a public `faucet(uint256)`, so any wallet
+ * holding STT for gas can mint its own stake. Before this existed in the app, a
+ * player who had claimed STT from the web faucet still had nothing to bet with,
+ * and the interface sent them BACK to that same faucet -- which does not issue
+ * tUSDC. That was a dead end sitting directly in the onboarding path.
+ *
+ * Testnet only, by construction: this function does not exist on a real
+ * collateral token, so there is nothing here that could work against real money.
+ */
+export async function mintCollateral(
+  client: DexClient,
+  amountWhole = 100n,
+): Promise<{ txHash: `0x${string}`; minted: bigint }> {
+  const decimals = client.collateral.decimals;
+  const amount = amountWhole * 10n ** BigInt(decimals);
+
+  const trader = client.exchange.client.createTrader({
+    ...(client.config.privateKey ? { privateKey: client.config.privateKey } : {}),
+    ...(client.config.walletClient ? { walletClient: client.config.walletClient } : {}),
+    ...(client.config.account ? { account: client.config.account } : {}),
+    decimals,
+  });
+
+  try {
+    const res = await trader.faucet({ amount });
+    // A reverted faucet resolves rather than throwing, same as an order.
+    if (res.receipt?.status === "reverted") {
+      throw new DexError("ORDER_REJECTED", "The faucet refused that request.", {
+        action: "It is rate-limited per address. Try again in a few minutes.",
+        retryable: true,
+      });
+    }
+    return { txHash: res.hash, minted: amount };
+  } catch (e) {
+    if (e instanceof DexError) throw e;
+    throw asDexError(e, "ORDER_REJECTED");
+  }
+}
+
 export interface Balances {
   readonly stt: bigint;
   readonly collateral: bigint;

@@ -15,6 +15,7 @@ import { TESTNET_CHAIN_ID } from "@/lib/wagmi";
 import { stt, shortAddress } from "@/lib/format";
 import { ConnectButton } from "@/components/Wallet";
 import { Button, Card } from "@/components/ui";
+import { GetFundsButton } from "@/components/GetFundsButton";
 
 export default function StartPage() {
   const { address, isConnected, chainId } = useAccount();
@@ -79,14 +80,23 @@ export default function StartPage() {
               You have {stt(gas.value)} STT for gas.
             </p>
           ) : null}
-          <a
-            href="https://testnet.somnia.network"
-            target="_blank"
-            rel="noreferrer noopener"
-            className="inline-flex items-center rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-accent-ink hover:opacity-90"
-          >
-            Open the faucet
-          </a>
+          <div className="space-y-3">
+            <div>
+              <a
+                href="https://testnet.somnia.network"
+                target="_blank"
+                rel="noreferrer noopener"
+                className="inline-flex items-center rounded-sm bg-accent px-4 py-2 font-[family-name:var(--font-mono)] text-xs font-medium uppercase tracking-wider text-accent-ink hover:brightness-110"
+              >
+                Get STT from the faucet
+              </a>
+              <p className="mt-1.5 text-xs text-ink-faint">
+                STT pays for transactions. The web faucet is the only source.
+              </p>
+            </div>
+            {/* tUSDC does NOT come from that faucet -- it is minted here. */}
+            <GetFundsButton compact />
+          </div>
         </Step>
 
         <Step n={4} title="Make your first call" done={false} image="/img/phone-chart-blue.jpg">

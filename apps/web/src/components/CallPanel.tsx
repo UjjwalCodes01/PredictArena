@@ -18,6 +18,7 @@ import { usePlaceCall } from "@/hooks/usePlaceCall";
 import { useBalances } from "@/hooks/useBalances";
 import { useIsWrongNetwork } from "./Wallet";
 import { Button, Card, ErrorNote, Skeleton } from "./ui";
+import { GetFundsButton } from "./GetFundsButton";
 import { stt as formatStt } from "@/lib/format";
 
 const FAUCET_URL = "https://testnet.somnia.network";
@@ -162,14 +163,20 @@ export function CallPanel({
                     ? "You need STT to pay for the transaction."
                     : `You need at least ${STAKE_PRESETS[0]} ${COLLATERAL_SYMBOL} to place a call.`}
               </p>
-              <a
-                href={FAUCET_URL}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="label mt-1 inline-block text-accent hover:brightness-125"
-              >
-                [ GET TESTNET FUNDS ]
-              </a>
+              {/* Two different shortfalls, two different fixes. STT only comes
+                  from the web faucet; tUSDC can be minted here, so send people
+                  to whichever one they actually need. */}
+              {noGas ? (
+                <a
+                  href={FAUCET_URL}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="label mt-1 inline-block text-accent hover:brightness-125"
+                >
+                  [ GET STT FROM THE FAUCET ]
+                </a>
+              ) : null}
+              {cannotAffordAny ? <GetFundsButton /> : null}
             </div>
           ) : null}
 
