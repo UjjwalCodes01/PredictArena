@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getStandings, currentWeekId, weekStartUtc } from "@predictarena/db";
+import { getStandings, currentWeekId, weekStartUtc, getDisplayNames } from "@predictarena/db";
 import { serverDb } from "@/lib/server";
 import type { StandingsResponse } from "@/lib/types";
 
@@ -30,10 +30,12 @@ export async function GET(request: Request): Promise<NextResponse> {
   try {
     const db = serverDb();
     const standings = await getStandings(db, weekId);
+    // One lookup for the whole page rather than a query per row.
+    const names = await getDisplayNames(db, standings.map((s) => s.wallet));
     const body: StandingsResponse = {
       weekId,
       weekStartIso: weekStartUtc(weekId).toISOString(),
-      standings: standings.map((s) => ({ ...s })),
+      standings: standings.map((s) => ({ ...s, displayName: names.get(s.wallet) ?? null })),
     };
     return NextResponse.json(body, { headers: { "cache-control": "no-store" } });
   } catch (e) {

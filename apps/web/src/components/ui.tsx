@@ -7,6 +7,7 @@
  * platforms, read badly to screen readers, and make a financial screen look
  * unserious. Meaning is carried by words.
  */
+import Image from "next/image";
 import type { ReactNode, ButtonHTMLAttributes } from "react";
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
@@ -65,9 +66,20 @@ export function Skeleton({ className = "" }: { className?: string }) {
  * Required to look intentional rather than broken -- a cold-start leaderboard
  * is in the demo, and "nothing here yet" must read as a fact, not a failure.
  */
-export function Empty({ title, hint, action }: { title: string; hint?: string; action?: ReactNode }) {
+export function Empty({
+  title, hint, action, image,
+}: { title: string; hint?: string; action?: ReactNode; image?: string }) {
   return (
-    <div className="flex flex-col items-center gap-2 px-6 py-12 text-center">
+    <div className="flex flex-col items-center gap-2 px-6 py-10 text-center">
+      {image ? (
+        <Image
+          src={image}
+          alt=""
+          width={96}
+          height={96}
+          className="mb-2 h-24 w-24 rounded-xl object-cover opacity-80"
+        />
+      ) : null}
       <p className="text-sm font-medium text-ink">{title}</p>
       {hint ? <p className="max-w-sm text-sm text-ink-soft">{hint}</p> : null}
       {action ? <div className="mt-2">{action}</div> : null}

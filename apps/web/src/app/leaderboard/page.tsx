@@ -3,17 +3,16 @@
 /**
  * The weekly board.
  *
- * Parameterised by week so a rollover cannot swap the table under the reader
- * mid-glance, and so a finished week stays readable after Monday. The reset
- * rule is stated on the page rather than assumed -- players need to know when
- * their streak stops counting.
+ * Parameterised by week so a rollover cannot swap the table under the reader,
+ * and searchable because a league of a hundred players is useless if you cannot
+ * find yourself in it.
  */
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import Link from "next/link";
+import Image from "next/image";
 import { useAccount } from "wagmi";
 import type { StandingsResponse } from "@/lib/types";
-import { shortAddress } from "@/lib/format";
+import { PlayerIdentity } from "@/components/PlayerIdentity";
 import { Card, Empty, ErrorNote, Skeleton } from "@/components/ui";
 
 async function fetchStandings(week?: string): Promise<StandingsResponse> {
@@ -25,15 +24,13 @@ async function fetchStandings(week?: string): Promise<StandingsResponse> {
   return r.json();
 }
 
-/** Step a week id back or forward without a date library. */
+/** Step a week id without pulling in a date library. */
 function shiftWeek(weekId: string, delta: number): string {
   const [y, w] = weekId.split("-W");
   const jan4 = Date.UTC(Number(y), 0, 4);
   const dow = new Date(jan4).getUTCDay() || 7;
   const monday = jan4 - (dow - 1) * 86_400_000 + (Number(w) - 1 + delta) * 7 * 86_400_000;
-  const d = new Date(monday);
-  const thursday = new Date(d);
-  thursday.setUTCDate(d.getUTCDate() + 3);
+  const thursday = new Date(monday + 3 * 86_400_000);
   const isoYear = thursday.getUTCFullYear();
   const week = Math.ceil(((thursday.getTime() - Date.UTC(isoYear, 0, 1)) / 86_400_000 + 1) / 7);
   return `${isoYear}-W${String(week).padStart(2, "0")}`;
@@ -42,6 +39,7 @@ function shiftWeek(weekId: string, delta: number): string {
 export default function LeaderboardPage() {
   const { address } = useAccount();
   const [week, setWeek] = useState<string | undefined>(undefined);
+  const [search, setSearch] = useState("");
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ["standings", week ?? "current"],
@@ -49,29 +47,72 @@ export default function LeaderboardPage() {
     refetchInterval: 20_000,
   });
 
-  const currentWeek = data?.weekId;
   const me = address?.toLowerCase();
+  const rows = useMemo(() => {
+    if (!data) return [];
+    const q = search.trim().toLowerCase();
+    if (!q) return data.standings;
+    return data.standings.filter(
+      (s) => s.wallet.toLowerCase().includes(q) || (s.displayName ?? "").toLowerCase().includes(q),
+    );
+  }, [data, search]);
+
+  const myRow = data?.standings.find((s) => s.wallet.toLowerCase() === me);
 
   return (
     <>
-      <div className="mb-4 flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight text-ink">Leaderboard</h1>
-          <p className="mt-1 text-sm text-ink-soft">
-            {currentWeek ? `Week ${currentWeek.replace("-W", ", week ")}` : "This week"}
-          </p>
+      <div className="mb-4 overflow-hidden rounded-xl border border-border">
+        <div className="relative h-28 w-full sm:h-32">
+          <Image
+            src="/img/finance-district.jpg"
+            alt=""
+            fill
+            priority
+            sizes="(max-width: 672px) 100vw, 672px"
+            className="object-cover"
+          />
+          <div className="absolute inset-0 bg-black/55" />
+          <div className="absolute inset-0 flex flex-col justify-end p-4">
+            <h1 className="text-xl font-semibold tracking-tight text-white">Leaderboard</h1>
+            <p className="mt-0.5 text-sm text-white/80">
+              {data ? `Week ${data.weekId}` : "This week"}
+              {data ? ` · ${data.standings.length} players` : ""}
+            </p>
+          </div>
         </div>
+      </div>
+
+      {myRow ? (
+        <Card className="mb-3 border-accent/40 bg-accent-soft p-3">
+          <div className="flex items-center justify-between gap-3">
+            <span className="tabular w-8 text-sm text-ink-soft">#{myRow.rank}</span>
+            <div className="min-w-0 flex-1">
+              <PlayerIdentity address={myRow.wallet} displayName={myRow.displayName} you link={false} />
+            </div>
+            <span className="tabular text-sm font-semibold text-ink">{myRow.points}</span>
+          </div>
+        </Card>
+      ) : null}
+
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search name or address"
+          aria-label="Search players"
+          className="min-w-0 flex-1 rounded-lg border border-border-strong bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-faint"
+        />
         <div className="flex gap-1">
           <button
-            onClick={() => setWeek(shiftWeek(currentWeek ?? "", -1))}
-            disabled={!currentWeek}
-            className="rounded-md border border-border-strong px-2.5 py-1.5 text-sm text-ink-soft hover:text-ink disabled:opacity-45"
+            onClick={() => setWeek(shiftWeek(data?.weekId ?? "", -1))}
+            disabled={!data}
+            className="rounded-md border border-border-strong px-2.5 py-2 text-sm text-ink-soft hover:text-ink disabled:opacity-45"
           >
             Previous
           </button>
           <button
             onClick={() => setWeek(undefined)}
-            className="rounded-md border border-border-strong px-2.5 py-1.5 text-sm text-ink-soft hover:text-ink"
+            className="rounded-md border border-border-strong px-2.5 py-2 text-sm text-ink-soft hover:text-ink"
           >
             This week
           </button>
@@ -83,8 +124,9 @@ export default function LeaderboardPage() {
           {[0, 1, 2, 3, 4].map((i) => (
             <div key={i} className="flex items-center gap-3 p-4">
               <Skeleton className="h-4 w-6" />
+              <Skeleton className="h-8 w-8 rounded-full" />
               <Skeleton className="h-4 w-32" />
-              <Skeleton className="ml-auto h-4 w-12" />
+              <Skeleton className="ml-auto h-4 w-10" />
             </div>
           ))}
         </Card>
@@ -94,58 +136,52 @@ export default function LeaderboardPage() {
           detail={error instanceof Error ? error.message : undefined}
           onRetry={() => void refetch()}
         />
-      ) : !data || data.standings.length === 0 ? (
+      ) : rows.length === 0 ? (
         <Card>
           <Empty
-            title="No scores yet this week"
-            hint="The board fills as calls settle. Place one and you will be the first name on it."
+            title={search ? "No player matches that" : "No scores yet this week"}
+            hint={
+              search
+                ? "Try part of an address, or a name."
+                : "The board fills as calls settle. Place one and you will be first on it."
+            }
           />
         </Card>
       ) : (
         <Card className="overflow-hidden">
-          <div className="grid grid-cols-[2rem_1fr_auto] gap-3 border-b border-border px-4 py-2.5 text-xs text-ink-faint">
-            <span>#</span>
-            <span>Player</span>
-            <span className="text-right">Points</span>
-          </div>
           <ul className="divide-y divide-border">
-            {data.standings.map((s) => {
-              const isMe = me === s.wallet.toLowerCase();
-              return (
-                <li
-                  key={s.wallet}
-                  className={`grid grid-cols-[2rem_1fr_auto] items-center gap-3 px-4 py-3 ${
-                    isMe ? "bg-accent-soft" : ""
-                  }`}
-                >
-                  <span className="tabular text-sm text-ink-faint">{s.rank}</span>
-                  <span className="min-w-0">
-                    <Link
-                      href={`/p/${s.wallet}`}
-                      className="tabular block truncate text-sm font-medium text-ink hover:underline"
-                    >
-                      {shortAddress(s.wallet)}
-                      {isMe ? <span className="ml-2 text-xs font-normal text-accent">You</span> : null}
-                    </Link>
-                    <span className="tabular mt-0.5 block text-xs text-ink-faint">
-                      {s.wins}W {s.losses}L
-                      {s.voids > 0 ? ` ${s.voids}V` : ""}
-                      {s.currentStreak >= 2 ? ` · ${s.currentStreak} in a row` : ""}
-                      {s.calibration !== null ? ` · ${s.calibration}% accurate` : ""}
-                    </span>
-                  </span>
-                  <span className="tabular text-right text-sm font-semibold text-ink">{s.points}</span>
-                </li>
-              );
-            })}
+            {rows.map((s) => (
+              <li
+                key={s.wallet}
+                className={`flex items-center gap-3 px-4 py-3 ${
+                  me === s.wallet.toLowerCase() ? "bg-accent-soft" : ""
+                }`}
+              >
+                <span className="tabular w-6 shrink-0 text-sm text-ink-faint">{s.rank}</span>
+                <div className="min-w-0 flex-1">
+                  <PlayerIdentity
+                    address={s.wallet}
+                    displayName={s.displayName}
+                    you={me === s.wallet.toLowerCase()}
+                  />
+                  <p className="tabular mt-1 text-xs text-ink-faint">
+                    {s.wins}W {s.losses}L
+                    {s.voids > 0 ? ` ${s.voids}V` : ""}
+                    {s.currentStreak >= 2 ? ` · ${s.currentStreak} in a row` : ""}
+                    {s.calibration !== null ? ` · ${s.calibration}% accurate` : ""}
+                  </p>
+                </div>
+                <span className="tabular shrink-0 text-sm font-semibold text-ink">{s.points}</span>
+              </li>
+            ))}
           </ul>
         </Card>
       )}
 
       <p className="mt-4 text-xs text-ink-faint">
-        A win scores 10 points, rising to 15 on a 3-win streak and 20 on 5. A void neither
-        scores nor breaks a streak. Accuracy appears after 5 settled calls. The league resets
-        every Monday at 00:00 UTC.
+        A win scores 10 points, rising to 15 on a 3-win streak and 20 on 5. A void neither scores nor
+        breaks a streak. Accuracy appears after 5 settled calls. The league resets every Monday at
+        00:00 UTC.
       </p>
     </>
   );

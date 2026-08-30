@@ -15,6 +15,7 @@ const config: NextConfig = {
   // The workspace packages ship TypeScript source, not a build step.
   transpilePackages: ["@predictarena/dex", "@predictarena/db"],
   typedRoutes: true,
+  images: { formats: ["image/avif", "image/webp"] },
   // Next 16 writes its own AGENTS.md / CLAUDE.md into the app directory. This
   // repo already has both at the root as the project spec, and a second pair
   // nested here would shadow them for anyone working in apps/web.

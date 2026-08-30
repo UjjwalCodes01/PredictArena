@@ -18,6 +18,7 @@
  *     legitimate rows. The one-per-window rule is a SCORING cap, enforced by the
  *     pure engine, so here it is only an index.
  */
+import { sql } from "drizzle-orm";
 import {
   pgTable, pgEnum, text, integer, bigint, numeric, timestamp, index, uniqueIndex, primaryKey,
 } from "drizzle-orm/pg-core";
@@ -123,17 +124,28 @@ export const calls = pgTable(
 );
 
 /** A participant. The wallet address IS the identity -- no accounts, no passwords. */
-export const wallets = pgTable("wallets", {
-  address: text("address").primaryKey(),
-  firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
-  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
-  /**
-   * Optional display name. Never required and currently never written: the
-   * wallet address IS the identity (AGENTS.md non-goals -- no accounts). Kept
-   * for an ENS-style name if that turns out to be trivial.
-   */
-  displayName: text("display_name"),
-});
+export const wallets = pgTable(
+  "wallets",
+  {
+    address: text("address").primaryKey(),
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+    /**
+     * Optional display name.
+     *
+     * The wallet address remains the identity -- there are no accounts and no
+     * passwords (AGENTS.md non-goals). A name is a label on top of it, and it
+     * can only be set by someone who signed a message proving they hold the
+     * key, so it cannot be squatted on another player's behalf.
+     */
+    displayName: text("display_name"),
+    displayNameSetAt: timestamp("display_name_set_at", { withTimezone: true }),
+  },
+  (t) => [
+    // Case-insensitive uniqueness: "Alice" and "alice" must not be two players.
+    uniqueIndex("wallets_display_name_uidx").on(sql`lower(${t.displayName})`),
+  ],
+);
 
 /**
  * Indexer cursors and heartbeats. Keyed by name so a new worker can add its own

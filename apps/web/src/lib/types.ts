@@ -40,6 +40,8 @@ export interface QuoteDto {
 export interface CallDto {
   id: string;
   wallet: string;
+  /** Claimed display name, if this player has set one. */
+  displayName?: string | null;
   windowId: string;
   asset: string;
   direction: "UP" | "DOWN";
@@ -57,6 +59,8 @@ export interface CallDto {
 export interface StandingDto {
   rank: number;
   wallet: string;
+  /** Claimed display name, if this player has set one. */
+  displayName?: string | null;
   points: number;
   wins: number;
   losses: number;
@@ -72,6 +76,12 @@ export interface StandingsResponse {
   weekId: string;
   weekStartIso: string;
   standings: StandingDto[];
+}
+
+export interface ProfileDto {
+  address: string;
+  displayName: string | null;
+  firstSeenAt: string | null;
 }
 
 /** Every API failure carries a machine code the UI switches on. */

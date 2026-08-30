@@ -62,6 +62,7 @@ export function MyCalls({ refreshKey }: { refreshKey: number }) {
         <Card>
           <Empty
             title="No calls yet"
+            image="/img/workspace-person.jpg"
             hint="Place your first call above. It will appear here the moment the chain confirms it."
           />
         </Card>

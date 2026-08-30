@@ -6,7 +6,7 @@
  * converge on the same row, because the reconciler will do exactly that every
  * 45 seconds and again on every startup.
  */
-import { and, desc, eq, inArray, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, ne, or, sql } from "drizzle-orm";
 import type { Database } from "./client";
 import { calls, wallets, windows, syncState } from "./schema";
 import type { NewCallRow, NewWindowRow, CallRow, WindowRow } from "./schema";
@@ -196,6 +196,76 @@ export async function touchWallet(db: Database, address: string): Promise<void> 
     .onConflictDoUpdate({ target: wallets.address, set: { lastSeenAt: now } });
 }
 
+/** Display-name rules. Deliberately narrow: a name is a label, not a bio. */
+export const DISPLAY_NAME_RE = /^[a-zA-Z0-9_-]{3,20}$/;
+
+export class DisplayNameError extends Error {
+  constructor(readonly code: "INVALID" | "TAKEN", message: string) {
+    super(message);
+    this.name = "DisplayNameError";
+  }
+}
+
+/**
+ * Claim a display name for an address.
+ *
+ * The CALLER is responsible for having verified a signature from this address
+ * first -- this function trusts its arguments, and the API route in front of it
+ * is where ownership is proved (AGENTS.md: the server trusts nothing the client
+ * merely asserts).
+ */
+export async function setDisplayName(db: Database, address: string, name: string): Promise<void> {
+  const trimmed = name.trim();
+  if (!DISPLAY_NAME_RE.test(trimmed)) {
+    throw new DisplayNameError(
+      "INVALID",
+      "Names are 3-20 characters, letters, numbers, hyphen or underscore.",
+    );
+  }
+  const wallet = normalizeAddress(address);
+  const now = new Date();
+  try {
+    await db
+      .insert(wallets)
+      .values({ address: wallet, displayName: trimmed, displayNameSetAt: now, firstSeenAt: now, lastSeenAt: now })
+      .onConflictDoUpdate({
+        target: wallets.address,
+        set: { displayName: trimmed, displayNameSetAt: now, lastSeenAt: now },
+      });
+  } catch (e) {
+    // The unique index is the arbiter, not a prior lookup: checking first would
+    // race two people claiming the same name at once.
+    if (String(e).includes("wallets_display_name_uidx")) {
+      throw new DisplayNameError("TAKEN", `"${trimmed}" is already taken.`);
+    }
+    throw e;
+  }
+}
+
+export async function getWallet(db: Database, address: string) {
+  const [row] = await db
+    .select()
+    .from(wallets)
+    .where(eq(wallets.address, normalizeAddress(address)))
+    .limit(1);
+  return row ?? null;
+}
+
+/** Display names for a batch of addresses, so a list needs one query not N. */
+export async function getDisplayNames(
+  db: Database,
+  addresses: readonly string[],
+): Promise<Map<string, string>> {
+  if (addresses.length === 0) return new Map();
+  const rows = await db
+    .select({ address: wallets.address, displayName: wallets.displayName })
+    .from(wallets)
+    .where(inArray(wallets.address, addresses.map(normalizeAddress)));
+  const out = new Map<string, string>();
+  for (const r of rows) if (r.displayName) out.set(r.address, r.displayName);
+  return out;
+}
+
 export async function getSyncState(db: Database, key: string) {
   const [row] = await db.select().from(syncState).where(eq(syncState.key, key)).limit(1);
   return row ?? null;
@@ -263,6 +333,48 @@ export async function getWalletCalls(db: Database, wallet: string, limit = 100):
     .where(eq(calls.wallet, normalizeAddress(wallet)))
     .orderBy(desc(calls.placedAt))
     .limit(limit);
+}
+
+/**
+ * Recent calls across every player, newest first.
+ *
+ * Powers the activity feed. Joined to windows so the caller gets the asset and
+ * close time without a second round trip.
+ */
+export async function getRecentCalls(
+  db: Database,
+  opts: { limit?: number; settledOnly?: boolean } = {},
+): Promise<Array<CallRow & { closesAt: Date; intervalSec: number | null }>> {
+  const limit = Math.min(opts.limit ?? 40, 200);
+  const rows = await db
+    .select({ call: calls, closesAt: windows.closesAt, intervalSec: windows.intervalSec })
+    .from(calls)
+    .innerJoin(windows, eq(calls.windowId, windows.id))
+    .where(opts.settledOnly ? ne(calls.status, "PENDING") : undefined)
+    .orderBy(desc(calls.settledAt), desc(calls.placedAt))
+    .limit(limit);
+  return rows.map((r) => ({ ...r.call, closesAt: r.closesAt, intervalSec: r.intervalSec }));
+}
+
+/** Headline counters for the home and activity pages. */
+export async function getLeagueTotals(db: Database, weekId: string): Promise<{
+  players: number;
+  calls: number;
+  settled: number;
+  volume: string;
+}> {
+  const [row] = await db
+    .select({
+      players: sql<number>`count(distinct ${calls.wallet})::int`,
+      calls: sql<number>`count(*)::int`,
+      settled: sql<number>`count(*) filter (where ${calls.status} <> 'PENDING')::int`,
+      // Sum as numeric and hand back a string: an amount must never round-trip
+      // through a JSON number.
+      volume: sql<string>`coalesce(sum(${calls.stake}), 0)::text`,
+    })
+    .from(calls)
+    .where(eq(calls.weekId, weekId));
+  return row ?? { players: 0, calls: 0, settled: 0, volume: "0" };
 }
 
 /** Windows by id, for reconciling a batch of calls in one round trip. */

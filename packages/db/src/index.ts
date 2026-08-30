@@ -15,7 +15,9 @@ export {
 export {
   upsertWindow, upsertCall, markWindowSettled, settleCallsForWindow, getNonTerminalCalls, getOverdueCalls,
   getOpenWindows, touchWallet, getSyncState, setSyncState, getScorableCalls,
-  getStandings, getWalletCalls, getWindowsByIds, normalizeAddress, TERMINAL_STATUSES,
+  getStandings, getWalletCalls, getWindowsByIds, getRecentCalls, getLeagueTotals,
+  setDisplayName, getWallet, getDisplayNames, DISPLAY_NAME_RE, DisplayNameError,
+  normalizeAddress, TERMINAL_STATUSES,
 } from "./queries";
 
 export { computeStandings, streakMultiplierX10, pointsForWin } from "./scoring";

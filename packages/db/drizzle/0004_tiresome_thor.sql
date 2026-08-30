@@ -1,0 +1,2 @@
+ALTER TABLE "wallets" ADD COLUMN "display_name_set_at" timestamp with time zone;--> statement-breakpoint
+CREATE UNIQUE INDEX "wallets_display_name_uidx" ON "wallets" USING btree (lower("display_name"));
