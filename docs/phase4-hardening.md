@@ -80,9 +80,18 @@ chain uncached, so it is tighter than a cached leaderboard read). Verified live:
 - a different IP unaffected
 - the 4 requests a normal page load makes → 0 blocked
 
-*Honest limit:* in-process, so on Vercel the budget is per-instance and resets on a cold start. A
-guard against accidents and casual abuse, not a determined distributed attacker — that needs a
-shared store or the platform WAF.
+**Measured limit — stronger than the earlier caveat.** Against the live deployment, **40 parallel
+requests were ALL served, none limited.** They spread across serverless instances, and each keeps
+its own bucket, so a distributed burst never meets a single budget.
+
+What it does still catch: one client hammering one instance — a page stuck in a retry loop, a
+script run in a terminal. That is the realistic accident, and it is worth having.
+
+What it does not catch: anything concurrent. Treat the numbers above (25 sequential requests, 3
+limited) as evidence it works *within* an instance, not as protection for the deployment. Real
+protection needs a shared store (Upstash/Redis) or the platform WAF. Not built, because adding a
+per-request database write to protect the database is self-defeating, and this is a testnet game
+with no funds at risk.
 
 **Query performance**, measured at 910 rows:
 

@@ -37,17 +37,41 @@ jobs:
             exit 0
           fi
 
-          # --fail-with-body so a 5xx is a failed step AND the reason is visible.
-          curl --fail-with-body --silent --show-error --max-time 120 \
-               --header "Authorization: Bearer $CRON_SECRET" \
-               "$APP_URL/api/cron/ingest" | tee response.json
+          # A trailing slash in APP_URL would build ".../api" with a double
+          # slash and 404. Easy to paste, invisible in the secrets UI, and it
+          # would look exactly like the endpoint being broken.
+          BASE="${APP_URL%/}"
+          # Tolerate the scheme being omitted, for the same reason.
+          case "$BASE" in http://*|https://*) ;; *) BASE="https://$BASE" ;; esac
+          echo "Target: $BASE/api/cron/ingest"
 
+          # -w writes the status on its own line so a failure names itself
+          # rather than leaving an empty log to guess at.
+          STATUS=$(curl --silent --show-error --max-time 120 \
+                        --header "Authorization: Bearer $CRON_SECRET" \
+                        --output response.json \
+                        --write-out '%{http_code}' \
+                        "$BASE/api/cron/ingest") || STATUS="000"
+
+          echo "HTTP $STATUS"
+          cat response.json 2>/dev/null || true
           echo
+
+          case "$STATUS" in
+            200) ;;
+            401) echo "::error::CRON_SECRET does not match the one set in the deployment."; exit 1 ;;
+            404) echo "::error::Endpoint not found. Check APP_URL, and that the deployment includes /api/cron/ingest."; exit 1 ;;
+            503) echo "::error::The app reported a failure — see the body above. CRON_SECRET may be unset in the deployment."; exit 1 ;;
+            000) echo "::error::Could not reach $BASE at all."; exit 1 ;;
+            *)   echo "::error::Unexpected HTTP $STATUS."; exit 1 ;;
+          esac
+
           # A 200 with ok:false still means the cycle did not do its job.
           if ! grep -q '"ok":true' response.json; then
-            echo "Ingest cycle reported a failure."
+            echo "::error::Ingest cycle returned 200 but reported ok:false."
             exit 1
           fi
+          echo "Ingest cycle completed."
 
       - name: Report health
         if: always()

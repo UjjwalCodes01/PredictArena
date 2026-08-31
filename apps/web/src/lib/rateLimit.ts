@@ -11,12 +11,18 @@ import "server-only";
  * A token bucket, so a burst is allowed (a page load fires several requests at
  * once) but a sustained flood is not.
  *
- * HONEST LIMIT: this is in-process. On Vercel each serverless instance keeps
- * its own buckets, so the effective limit is per-instance rather than global,
- * and it resets on a cold start. That makes it a guard against accidents and
- * casual abuse, not a defence against a determined distributed attacker — that
- * needs a shared store (Redis) or the platform's own WAF. Stated here rather
- * than implied, so nobody mistakes it for more than it is.
+ * MEASURED LIMIT: this is in-process, and on Vercel that matters more than it
+ * sounds. Forty parallel requests against the live deployment were ALL served —
+ * they landed on different serverless instances, each holding its own bucket.
+ *
+ * So this catches ONE client hammering ONE instance: a page stuck in a retry
+ * loop, a script run from a terminal. That is the realistic accident and worth
+ * having. It does not slow a concurrent burst at all.
+ *
+ * Real protection needs a shared store or the platform WAF. Deliberately not
+ * built: a per-request database write to protect the database is
+ * self-defeating, and nothing here is worth attacking. Written down so nobody
+ * reads this file and believes the deployment is defended.
  */
 
 interface Bucket {
