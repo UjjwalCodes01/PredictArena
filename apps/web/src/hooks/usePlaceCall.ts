@@ -22,12 +22,31 @@ import { getWalletDexClient } from "@/lib/dexClient";
 import { addPending } from "@/lib/pending";
 
 
+/**
+ * How long to wait before telling the user a transaction is slow.
+ *
+ * Shannon blocks in about a second, so twenty is already deeply abnormal —
+ * long enough not to cry wolf on a brief hiccup, short enough that nobody
+ * stares at a spinner wondering whether the app has died.
+ */
+const CONFIRM_PATIENCE_MS = 20_000;
+/** After which we stop holding the request open. Background polling continues. */
+const CONFIRM_GIVE_UP_MS = 180_000;
+
 export type CallPhase =
   | { kind: "idle" }
   | { kind: "preparing" }
   | { kind: "approving" }
   | { kind: "signing" }
   | { kind: "confirming"; txHash: `0x${string}` }
+  /**
+   * Sent, accepted by the network, but not mined inside our patience.
+   *
+   * NOT a failure — the transaction is live and may still confirm. The
+   * distinction matters: telling someone their call failed when it is about to
+   * succeed invites them to place a second one.
+   */
+  | { kind: "slow"; txHash: `0x${string}` }
   | { kind: "placed"; txHash: `0x${string}`; filled: bigint }
   | { kind: "cancelled" }
   | { kind: "error"; code: string; message: string; action?: string };
@@ -114,7 +133,18 @@ export function usePlaceCall() {
               account: address,
               chain: walletClient.chain,
             });
-            await dex.rpc.waitForTransactionReceipt({ hash: approvalHash });
+            const approvalReceipt = await dex.rpc
+              .waitForTransactionReceipt({ hash: approvalHash, timeout: CONFIRM_GIVE_UP_MS })
+              .catch(() => null);
+            if (!approvalReceipt || approvalReceipt.status === "reverted") {
+              setPhase({
+                kind: "error",
+                code: "ORDER_REJECTED",
+                message: "The approval did not go through.",
+                action: "Try again — nothing was staked.",
+              });
+              return;
+            }
           }
           ready = withApproval;
         }
@@ -129,7 +159,34 @@ export function usePlaceCall() {
         });
 
         setPhase({ kind: "confirming", txHash });
-        const receipt = await dex.rpc.waitForTransactionReceipt({ hash: txHash });
+
+        // viem waits forever by default. A stalled chain would leave this on
+        // "Placing your call" with no explanation and no way out, which is the
+        // stuck-transaction case the plan calls for.
+        let receipt = await dex.rpc
+          .waitForTransactionReceipt({ hash: txHash, timeout: CONFIRM_PATIENCE_MS })
+          .catch(() => null);
+
+        if (!receipt) {
+          // Say so, offer the explorer, and KEEP WAITING in the background.
+          setPhase({ kind: "slow", txHash });
+          receipt = await dex.rpc
+            .waitForTransactionReceipt({ hash: txHash, timeout: CONFIRM_GIVE_UP_MS })
+            .catch(() => null);
+        }
+
+        if (!receipt) {
+          // Still nothing. The transaction remains live on-chain and the
+          // indexer will pick it up if it lands, so this is reported as
+          // unconfirmed rather than failed.
+          setPhase({
+            kind: "error",
+            code: "SETTLEMENT_TIMEOUT",
+            message: "Your call was sent but has not confirmed yet.",
+            action: "It may still land. Check the explorer, and do not send it twice.",
+          });
+          return;
+        }
 
         // A revert resolves rather than throwing. Without this check a failed
         // call would be recorded as pending and never resolve.
@@ -190,7 +247,7 @@ export function usePlaceCall() {
 
   const busy =
     phase.kind === "preparing" || phase.kind === "approving" ||
-    phase.kind === "signing" || phase.kind === "confirming";
+    phase.kind === "signing" || phase.kind === "confirming" || phase.kind === "slow";
 
   return { phase, place, reset, busy };
 }

@@ -295,6 +295,7 @@ function PlaceAction({
     : phase.kind === "approving" ? "Approve tUSDC in your wallet"
     : phase.kind === "signing" ? "Confirm in your wallet"
     : phase.kind === "confirming" ? "Placing your call"
+    : phase.kind === "slow" ? "Still confirming"
     : phase.kind === "placed" ? "Call placed"
     : `Call ${direction === "UP" ? "Up" : "Down"}`;
 
@@ -321,6 +322,26 @@ function PhaseNote({
       </p>
     );
   }
+  if (phase.kind === "slow") {
+    return (
+      <div className="mt-3 rounded-sm border border-warn/40 bg-warn-soft/60 px-3 py-2">
+        <p className="text-sm text-ink">
+          This is taking longer than usual. Your call was sent and may still confirm.
+        </p>
+        <p className="mt-1 text-sm text-ink-soft">
+          Do not place it again — you would be paying twice for the same window.
+        </p>
+        <a
+          href={`https://shannon-explorer.somnia.network/tx/${phase.txHash}`}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="label mt-1 inline-block text-accent hover:brightness-125"
+        >
+          [ VIEW ON EXPLORER ]
+        </a>
+      </div>
+    );
+  }
   if (phase.kind === "cancelled") {
     // Deliberately quiet: rejecting a signature is a choice, not a failure.
     return (
@@ -337,6 +358,11 @@ function PhaseNote({
           {...(phase.action ? { action: phase.action } : {})}
           onRetry={onDismiss}
         />
+        {phase.code === "SETTLEMENT_TIMEOUT" ? (
+          <p className="mt-2 text-xs text-ink-faint">
+            Unconfirmed is not the same as failed. If it lands, it will appear in your calls.
+          </p>
+        ) : null}
         {phase.code === "NO_LIQUIDITY" ? (
           <p className="mt-2 text-xs text-ink-faint">
             Binary contracts need someone on the other side. A heavy favourite often has no

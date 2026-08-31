@@ -1,35 +1,35 @@
 {
-  "recordedAt": "2026-08-30T12:55:10.267Z",
+  "recordedAt": "2026-08-31T15:05:05.177Z",
   "chainId": 50312,
   "wallet": "0xf06243d774F3872F974F3d01da55C2E050F2B542",
   "asset": "BTC",
   "intervalSec": 300,
-  "marketId": "0x000000000000000000000000000000000000000000000000000000000000de1c",
-  "pool": "0x476bDbf19e3eCf89CA20788DAbC848634b9B270B",
+  "marketId": "0x000000000000000000000000000000000000000000000000000000000000f0e0",
+  "pool": "0x5dF3d8fca5506427bb585F427230329Ce30a2DD3",
   "venueId": "0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c",
   "question": "BTC closes at or above its opening price",
   "strike": "0",
-  "expiry": "1788094500",
+  "expiry": "1788188700",
   "side": "BUY_YES",
   "stakeTusdc": "1.000000",
-  "limitPrice": "946000",
-  "quantity": "1057000",
-  "escrow": "999922",
-  "orderTxHash": "0x00f09f2f19338242d2d2337e4c3343a0f74e5d677687141f03ea04cc975acc04",
+  "limitPrice": "433000",
+  "quantity": "2309000",
+  "escrow": "999797",
+  "orderTxHash": "0xe8b193de1e2c3da4b112941d9033d1b3691373e7428f6dc27a38983f9bb01681",
   "orderStatus": "filled",
   "fills": [
     {
-      "quantity": "1057000",
-      "price": "938000"
+      "quantity": "2375000",
+      "price": "362000"
     }
   ],
   "settlement": {
     "status": "RESOLVED",
-    "winningOutcome": 0
+    "winningOutcome": 1
   },
-  "outcome": "WON",
-  "redeemTxHash": "0x0a397cffadd58c93266758d15c678cf6adfdf1a46428a983d584c65993f65679",
-  "payoutTusdc": "1.057000",
+  "outcome": "LOST",
+  "redeemTxHash": null,
+  "payoutTusdc": null,
   "notes": [
     "Written by `pnpm smoke` — a full live round-trip through packages/dex."
   ]
