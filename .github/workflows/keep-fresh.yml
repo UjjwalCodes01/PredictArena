@@ -5,10 +5,17 @@
 # every five minutes and is free on a public repository, so it drives the same
 # endpoint the daemon's loops would.
 #
-# This is a FALLBACK. The daemon tails live chain events and reacts in seconds;
-# this reacts on a timer and only while GitHub feels like running it (scheduled
-# workflows are best-effort and get delayed under load). Prefer hosting the
-# daemon — see apps/indexer/Dockerfile.
+# MEASURED REALITY: GitHub honours this schedule badly. One run fired in an
+# eight-hour window against a five-minute cadence — scheduled workflows are
+# best-effort and are dropped, not queued, under load.
+#
+# So each invocation does as much as it usefully can rather than one cycle and
+# out: it drives the endpoint repeatedly for a bounded stretch. Still an
+# ordinary CI job, nowhere near a daemon, but a single lucky firing now covers
+# a quarter of an hour instead of a moment.
+#
+# The site ALSO refreshes itself from ordinary traffic (`/api/tick`), so a
+# visitor keeps the projection current whether or not GitHub ever runs this.
 name: keep-fresh
 
 on:
@@ -24,7 +31,7 @@ concurrency:
 jobs:
   ingest:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
       - name: Drive one ingest cycle
         env:
@@ -66,12 +73,28 @@ jobs:
             *)   echo "::error::Unexpected HTTP $STATUS."; exit 1 ;;
           esac
 
-          # A 200 with ok:false still means the cycle did not do its job.
           if ! grep -q '"ok":true' response.json; then
             echo "::error::Ingest cycle returned 200 but reported ok:false."
             exit 1
           fi
-          echo "Ingest cycle completed."
+          echo "First cycle completed."
+
+          # GitHub fires this rarely, so make a firing count. Roughly fifteen
+          # more minutes of cycles, then exit cleanly well inside the job
+          # timeout. A failure here is NOT fatal: the first cycle already
+          # succeeded, and the next scheduled run (or a page view) picks up.
+          DEADLINE=$(( $(date +%s) + 15 * 60 ))
+          CYCLES=1
+          while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+            sleep 45
+            CODE=$(curl --silent --show-error --max-time 90 \
+                        --header "Authorization: Bearer $CRON_SECRET" \
+                        --output /dev/null --write-out '%{http_code}' \
+                        "$BASE/api/cron/ingest") || CODE="000"
+            CYCLES=$((CYCLES + 1))
+            echo "  cycle $CYCLES -> HTTP $CODE"
+          done
+          echo "Ran $CYCLES cycles."
 
       - name: Report health
         if: always()

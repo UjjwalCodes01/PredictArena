@@ -241,8 +241,17 @@ export async function catchUpClosedWindows(
   dex: DexClient,
   db: Database,
   sinceMinutes = 180,
+  /**
+   * Cap on windows scanned in one pass.
+   *
+   * Reading fills costs ~1.6s per window, so an unbounded sweep runs for
+   * minutes — fine for a daemon, fatal inside a serverless function, where it
+   * simply times out having done nothing. A caller with a deadline passes a
+   * small number and comes back for the rest.
+   */
+  maxWindows = 200,
 ): Promise<IngestCallsResult> {
-  const rows = await getRecentlyClosedWindows(db, sinceMinutes);
+  const rows = (await getRecentlyClosedWindows(db, sinceMinutes)).slice(0, maxWindows);
   if (rows.length === 0) {
     return { windowsScanned: 0, fillsSeen: 0, callsWritten: 0, errors: 0 };
   }

@@ -33,7 +33,7 @@ export const maxDuration = 60;
  */
 
 /** Older than this and a page view should trigger a cycle. */
-const STALE_AFTER_MS = 150_000;
+const STALE_AFTER_MS = 60_000;
 
 /**
  * One cycle at a time per instance, with an EXPIRY.
@@ -47,11 +47,25 @@ const STALE_AFTER_MS = 150_000;
  * A timestamp cannot get stuck. Past the lease, the lock is simply gone.
  */
 let runningSince = 0;
-const LOCK_LEASE_MS = 90_000;
+const LOCK_LEASE_MS = 45_000;
 
 /** Cheap guard against re-running the instant a cycle finishes. */
 let lastRunAt = 0;
-const MIN_GAP_MS = 30_000;
+const MIN_GAP_MS = 20_000;
+
+/** Which leg to run next. Rotates so every leg comes round. */
+let tickCount = 0;
+
+/**
+ * Where the next `calls` pass starts.
+ *
+ * Reading fills costs ~1.6s per window; scanning all 25 took over 25s and the
+ * leg timed out having written nothing. Each pass takes a slice and advances,
+ * so successive pokes cover everything and none of them overruns.
+ */
+let callsOffset = 0;
+const CALLS_SLICE = 6;
+const CATCHUP_SLICE = 4;
 
 export async function GET(request: Request): Promise<NextResponse> {
   const limit = rateLimit(`tick:${clientKey(request)}`, { capacity: 6, refillPerSec: 0.2 });
@@ -85,34 +99,75 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   runningSince = Date.now();
   const started = Date.now();
-  const BUDGET_MS = 45_000;
-  const room = (need: number): boolean => Date.now() - started + need < BUDGET_MS;
-  const done: Record<string, number> = {};
 
+  /*
+   * ONE slice per invocation, rotating.
+   *
+   * A full cycle does not fit in a serverless function: `ingestWindows` alone
+   * measured 15.3s for 23 windows (each row is an upsert round-trip to a
+   * database an ocean away), and the complete cycle ran past 115s locally.
+   * Trying to do it all produced FUNCTION_INVOCATION_TIMEOUT — a 504, no work
+   * done, nothing to show for the invocation.
+   *
+   * So each poke does one leg and finishes well inside the limit. The browser
+   * pokes every 90 seconds, so all three legs come round within a few minutes,
+   * and every invocation actually completes instead of being killed.
+   *
+   * Order matters: settlement first, because a call stuck on PENDING is the
+   * most visible failure; then new calls; then the catch-up safety net.
+   */
+  const LEGS = ["settle", "windows", "calls", "catchup"] as const;
+  const leg = LEGS[tickCount % LEGS.length]!;
+  tickCount += 1;
+
+  const done: Record<string, number> = {};
   try {
     const dex = serverDex();
-    // Bounded: this leg is not optional, but it is also not allowed to consume
-    // the whole budget and leave nothing for settlement.
-    const windows = await withDeadline("ingestWindows", 25_000, () =>
-      ingestWindows(dex, db, ["BTC", "ETH"]),
-    );
-    done["windows"] = windows.written;
 
-    if (room(15_000)) done["calls"] = (await ingestCalls(dex, db, windows.windows)).callsWritten;
-    if (room(10_000)) done["settled"] = (await reconcile(dex, db, "overdue")).callsSettled;
-    if (room(15_000)) done["recovered"] = (await catchUpClosedWindows(dex, db, 60)).callsWritten;
+    if (leg === "settle") {
+      const r = await withDeadline("reconcile", 20_000, () => reconcile(dex, db, "overdue"));
+      done["settled"] = r.callsSettled;
+    } else if (leg === "windows") {
+      const w = await withDeadline("ingestWindows", 25_000, () =>
+        ingestWindows(dex, db, ["BTC", "ETH"]),
+      );
+      done["windows"] = w.written;
+    } else if (leg === "calls") {
+      // Its OWN leg, and a SLICE of it. Bundled onto the windows pass, calls
+      // never ran at all; scanning every window at once, it timed out at 25s.
+      // Reading fills costs ~1.6s per window, so six per pass fits and the
+      // offset walks through the rest over successive pokes.
+      const w = await withDeadline("windowsForCalls", 18_000, () =>
+        ingestWindows(dex, db, ["BTC", "ETH"]),
+      );
+      const all = w.windows;
+      if (all.length > 0) {
+        const startAt = callsOffset % all.length;
+        const slice = [...all, ...all].slice(startAt, startAt + CALLS_SLICE);
+        callsOffset = (startAt + CALLS_SLICE) % all.length;
+        const c = await withDeadline("ingestCalls", 22_000, () => ingestCalls(dex, db, slice));
+        done["calls"] = c.callsWritten;
+        done["scanned"] = slice.length;
+      }
+    } else {
+      const c = await withDeadline("catchUp", 22_000, () =>
+        catchUpClosedWindows(dex, db, 60, CATCHUP_SLICE),
+      );
+      done["recovered"] = c.callsWritten;
+    }
 
+    // Heartbeat every time: the point is that SOMETHING is watching.
     const now = new Date().toISOString();
-    await setSyncState(db, "ingest", { cursor: now });
     await setSyncState(db, "heartbeat", { cursor: now });
+    if (leg === "calls") await setSyncState(db, "ingest", { cursor: now });
 
     return NextResponse.json(
-      { ran: true, ms: Date.now() - started, ...done },
+      { ran: true, leg, ms: Date.now() - started, ...done },
       { headers: { "cache-control": "no-store" } },
     );
   } catch (e) {
     return NextResponse.json(
-      { ran: false, reason: e instanceof Error ? e.message.slice(0, 120) : "cycle failed" },
+      { ran: false, leg, reason: e instanceof Error ? e.message.slice(0, 120) : "cycle failed" },
       { status: 503 },
     );
   } finally {
