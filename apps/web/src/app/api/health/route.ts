@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSyncState, currentWeekId } from "@predictarena/db";
 import { getWindows } from "@predictarena/dex";
-import { serverDb, serverDex, dbRead } from "@/lib/server";
+import { serverDb, serverDex, dbRead, withDeadline } from "@/lib/server";
 import { rateLimit, clientKey, tooManyRequests } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
@@ -70,9 +70,30 @@ export async function GET(request: Request): Promise<NextResponse> {
       return `reported ${ageSec}s ago`;
     }),
     timed(async () => {
-      const windows = await getWindows(serverDex(), { limit: 5 });
-      if (windows.length === 0) throw new Error("venue returned no windows");
-      return `${windows.length} live windows`;
+      /*
+       * Ask whether the venue ANSWERS, not whether it currently has tradable
+       * windows.
+       *
+       * This used to call `getWindows({ limit: 5 })` and fail on an empty
+       * result. `limit` is a fetch budget applied BEFORE the tradable filter,
+       * so a healthy venue whose first five rows happen to be mid-roll
+       * returned zero — and the check reported "chain down" while
+       * /api/windows was serving three windows perfectly well.
+       *
+       * A monitor that cries wolf gets muted, which is worse than no monitor.
+       * So: reachable and answering is healthy. Having nothing tradable right
+       * now is a fact about the schedule, and it is reported rather than
+       * treated as an outage.
+       */
+      const windows = await withDeadline("getWindows", 20_000, () =>
+        getWindows(serverDex(), { includeUntradable: true, limit: 20 }),
+      );
+      if (windows.length === 0) {
+        // Genuinely nothing listed at all — that IS a venue problem.
+        throw new Error("venue listed no markets at all");
+      }
+      const tradable = windows.filter((w) => w.isTradable).length;
+      return `${windows.length} markets, ${tradable} tradable`;
     }),
   ]);
 
