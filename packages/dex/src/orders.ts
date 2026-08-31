@@ -283,7 +283,11 @@ export async function preflightCall(
     );
   }
 
-  const needsApproval = allowance < quote.escrow;
+  // Same basis as the approval we build: the pool requires `quantity`, because
+  // a binary contract can settle at up to 1.0 collateral. Comparing against the
+  // escrow here would report "no approval needed" while the order reverts for
+  // exactly that reason.
+  const needsApproval = allowance < quote.quantity;
 
   // With auto-approve on (the default) the SDK bundles the approval, so a short
   // allowance is not an error. A browser flow usually wants the opposite: the
@@ -293,7 +297,7 @@ export async function preflightCall(
   if (needsApproval && params.autoApprove === false) {
     throw new DexError(
       "NEEDS_APPROVAL",
-      `Allowance ${formatFixed(allowance, d, 4)} is below the ${formatFixed(quote.escrow, d, 4)} escrow.`,
+      `Allowance ${formatFixed(allowance, d, 4)} is below the ${formatFixed(quote.quantity, d, 4)} the pool requires.`,
       { action: `Approve ${client.collateral.symbol} for the pool, then place the call.` },
     );
   }
@@ -361,10 +365,20 @@ export interface PreparedCall {
  *
  * It is also simply worse for the user. An unlimited allowance means the pool
  * can move every tUSDC the wallet will ever hold, forever, on the strength of
- * one signature. Approving the escrow means the worst case is this one call.
+ * one signature. A bounded approval means the worst case is this one call.
  *
- * The cost is an approval per call rather than one ever. On a testnet game with
- * one-tUSDC stakes that is a fair trade for not being flagged as a drainer.
+ * HOW MUCH. Not the escrow — that was a regression that broke every call with
+ * ERC20InsufficientAllowance. The pool escrows against its OWN worst case: a
+ * binary contract can settle at up to 1.0 collateral, so it requires
+ * `quantity` units regardless of the price actually paid. Measured on chain:
+ * a 10 tUSDC stake produced an escrow of 9.99 and a required allowance of
+ * 20.03, which is exactly the 20.03 contracts the order was buying.
+ *
+ * So the amount is the QUANTITY, expressed in collateral units. Still bounded,
+ * still specific to this one call, and actually sufficient.
+ *
+ * The cost is an approval per call rather than one ever. On a testnet game that
+ * is a fair trade for not asking every player for unlimited spending authority.
  */
 export function buildExactApproval(
   client: DexClient,
@@ -419,11 +433,16 @@ export async function prepareCall(client: DexClient, req: CallRequest): Promise<
     }),
   );
 
-  // Replace the SDK's unlimited approval with one sized to this call. See
-  // buildExactApproval: an infinite allowance is what a drainer asks for, and
-  // wallet scanners treat it accordingly.
+  // Replace the SDK's unlimited approval with one sized to this call. The pool
+  // requires `quantity` (each contract can settle at 1.0), not the escrow —
+  // approving the escrow reverts with ERC20InsufficientAllowance.
+  //
+  // A little headroom on top: the venue may round or charge a fee at the edge,
+  // and a revert here costs the user gas for nothing while an unused allowance
+  // costs them nothing at all.
+  const required = quote.quantity + quote.quantity / 100n;
   const approval: UnsignedCall | undefined = preflight.needsApproval
-    ? buildExactApproval(client, req.window.pool, quote.escrow)
+    ? buildExactApproval(client, req.window.pool, required)
     : undefined;
 
   return {
