@@ -16,6 +16,8 @@ import type { CallDto, StandingsResponse, ProfileDto } from "@/lib/types";
 import { amount, shortAddress, timeAgo } from "@/lib/format";
 import { Avatar } from "@/components/Avatar";
 import { ShareButton } from "@/components/ShareButton";
+import { ChallengeButton } from "@/components/ChallengeButton";
+import { DuelList } from "@/components/DuelList";
 import Link from "next/link";
 import { CopyAddress } from "@/components/CopyAddress";
 import { FormStrip } from "@/components/FormStrip";
@@ -88,7 +90,11 @@ export default function ProfilePage({ params }: { params: Promise<{ address: str
         <div className="px-4 pb-4">
           <div className="-mt-7 flex items-end justify-between gap-3">
             <Avatar address={address} size={60} className="ring-4 ring-surface" />
-            <ShareButton address={address} />
+            <div className="flex items-center gap-2">
+              {/* Renders nothing on your own page, or when disconnected. */}
+              <ChallengeButton opponent={address} />
+              <ShareButton address={address} />
+            </div>
           </div>
           <h1 className="mt-2 break-words text-lg font-bold uppercase tracking-tight text-ink">
             {name ?? shortAddress(address)}
@@ -168,6 +174,58 @@ export default function ProfilePage({ params }: { params: Promise<{ address: str
               <Stat label="Voided" value={standing.voids} />
               <Stat label="Settled" value={standing.settled} />
             </div>
+
+            {/*
+              The skill figures, kept together and explained.
+
+              Wins alone measure luck as much as judgement, so these two say
+              whether the record holds up: edge asks if you beat the price you
+              paid, Brier asks how accurate your stated probabilities were.
+            */}
+            <div className="mt-4 border-t border-border pt-4">
+              <p className="label mb-2">FORECAST SKILL</p>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                <Stat
+                  label="Edge"
+                  value={
+                    standing.edge === null
+                      ? "—"
+                      : `${standing.edge > 0 ? "+" : ""}${standing.edge}`
+                  }
+                  unit={standing.edge === null ? undefined : "pts"}
+                  tone={
+                    standing.edge === null ? "default" : standing.edge > 0 ? "up" : standing.edge < 0 ? "down" : "default"
+                  }
+                />
+                <Stat
+                  label="Brier"
+                  value={standing.brier === null ? "—" : standing.brier.toFixed(3)}
+                />
+                <Stat
+                  label="Avg price paid"
+                  value={standing.avgImplied === null ? "—" : `${standing.avgImplied}%`}
+                />
+              </div>
+              <p className="mt-3 text-xs leading-relaxed text-ink-faint">
+                {standing.edge === null ? (
+                  <>Both appear after 5 settled calls — fewer than that is noise, not a signal.</>
+                ) : (
+                  <>
+                    This player won {standing.calibration}% of settled calls while paying an average
+                    of {standing.avgImplied}%, an edge of{" "}
+                    {standing.edge > 0 ? "+" : ""}
+                    {standing.edge} points.{" "}
+                    {standing.edge > 0
+                      ? "Positive edge means finding sides the market underpriced."
+                      : standing.edge < 0
+                        ? "Negative edge means the market priced these better than they called them."
+                        : "Exactly as often as the price implied."}{" "}
+                    Brier scores forecast accuracy: 0 is perfect, 0.250 is what you get by saying
+                    "50%" every time.
+                  </>
+                )}
+              </p>
+            </div>
           </>
         ) : (
           <p className="text-sm text-ink-soft">
@@ -203,6 +261,10 @@ export default function ProfilePage({ params }: { params: Promise<{ address: str
           </>
         )}
       </Card>
+
+      <div className="mb-4">
+        <DuelList wallet={address} />
+      </div>
 
       <h2 className="label mb-2">CALL HISTORY</h2>
       {calls.isPending ? (

@@ -69,6 +69,12 @@ export interface StandingDto {
   currentStreak: number;
   bestStreak: number;
   calibration: number | null;
+  /** Brier score, 0-1. Lower is better; 0.25 is a coin flip. Null under the minimum. */
+  brier: number | null;
+  /** Percentage points of edge over the price paid. Positive means skill. */
+  edge: number | null;
+  /** Mean probability the market charged, 0-100. Context for `edge`. */
+  avgImplied: number | null;
   lastWinAtSec: number | null;
 }
 

@@ -154,9 +154,15 @@ export default function LeaderboardPage() {
           <div className="hidden items-center gap-3 border-b border-border px-4 py-2 md:flex">
             <span className="label w-6">#</span>
             <span className="label flex-1">PLAYER</span>
-            <span className="label w-16 text-right">W-L</span>
-            <span className="label w-16 text-right">STREAK</span>
+            <span className="label w-14 text-right">W-L</span>
+            <span className="label w-14 text-right">STREAK</span>
             <span className="label w-20 text-right">ACCURACY</span>
+            <span
+              className="label w-16 text-right"
+              title="Realized win rate minus the price you paid. Positive means you find sides the market underprices."
+            >
+              EDGE
+            </span>
             <span className="label w-12 text-right">POINTS</span>
           </div>
           <ul className="divide-y divide-border">
@@ -182,17 +188,32 @@ export default function LeaderboardPage() {
                     {s.voids > 0 ? ` ${s.voids}V` : ""}
                     {s.currentStreak >= 2 ? ` · ${s.currentStreak} in a row` : ""}
                     {s.calibration !== null ? ` · ${s.calibration}% accurate` : ""}
+                    {s.edge !== null ? ` · ${s.edge > 0 ? "+" : ""}${s.edge} edge` : ""}
                   </p>
                 </div>
 
-                <span className="tabular hidden w-16 shrink-0 text-right text-sm text-ink-soft md:block">
+                <span className="tabular hidden w-14 shrink-0 text-right text-sm text-ink-soft md:block">
                   {s.wins}-{s.losses}
                 </span>
-                <span className="tabular hidden w-16 shrink-0 text-right text-sm text-ink-soft md:block">
+                <span className="tabular hidden w-14 shrink-0 text-right text-sm text-ink-soft md:block">
                   {s.currentStreak >= 2 ? s.currentStreak : "—"}
                 </span>
                 <span className="tabular hidden w-20 shrink-0 text-right text-sm text-ink-soft md:block">
                   {s.calibration === null ? "—" : `${s.calibration}%`}
+                </span>
+                {/* Sign carries the meaning, so it is stated with a + or - and
+                    coloured — never colour alone. */}
+                <span
+                  className={`tabular hidden w-16 shrink-0 text-right text-sm md:block ${
+                    s.edge === null ? "text-ink-soft" : s.edge > 0 ? "text-up" : s.edge < 0 ? "text-down" : "text-ink-soft"
+                  }`}
+                  title={
+                    s.edge === null
+                      ? "Needs 5 settled calls"
+                      : `Won ${s.calibration}% while paying an average of ${s.avgImplied}%`
+                  }
+                >
+                  {s.edge === null ? "—" : `${s.edge > 0 ? "+" : ""}${s.edge}`}
                 </span>
 
                 <span className="tabular w-12 shrink-0 text-right text-sm font-semibold text-ink">
@@ -206,8 +227,11 @@ export default function LeaderboardPage() {
 
       <p className="mt-4 text-xs text-ink-faint">
         A win scores 10 points, rising to 15 on a 3-win streak and 20 on 5. A void neither scores nor
-        breaks a streak. Accuracy appears after 5 settled calls. The league resets every Monday at
-        00:00 UTC.
+        breaks a streak. The league resets every Monday at 00:00 UTC.
+        {" "}
+        <strong className="text-ink">Edge</strong> is the honest one: your win rate minus the price
+        you paid. Anyone can win a coin flip — a positive edge means you are finding sides the
+        market has underpriced. Both it and accuracy appear after 5 settled calls.
       </p>
     </>
   );

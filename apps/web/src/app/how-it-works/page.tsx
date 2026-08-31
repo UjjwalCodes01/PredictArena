@@ -71,6 +71,29 @@ export default function HowItWorksPage() {
           </p>
         </Section>
 
+        <Section title="Are you good, or lucky?" image="/img/chart-candles-dark.jpg">
+          <p>
+            Wins alone cannot tell those apart. Back the favourite every time and you will win
+            often without ever knowing anything the market did not already. So the league measures
+            two more things.
+          </p>
+          <p>
+            <strong className="text-ink">Edge</strong> is your win rate minus the average price you
+            paid. You never type a probability here — the price is the claim. Back Up at 60c and
+            you are saying Up is 60% likely. Win 70% of the time and your edge is +10: you are
+            finding sides the market has underpriced. Over enough calls luck averages to nothing,
+            so edge is what is left.
+          </p>
+          <p>
+            <strong className="text-ink">Brier</strong> scores how accurate those claims were. Zero
+            is perfect. <strong className="text-ink">0.250 is exactly what you score by saying
+            "50%" every time</strong> — the line between forecasting and guessing. Winning a 10%
+            longshot pays well and scores badly, which is correct: you said it was unlikely and it
+            happened.
+          </p>
+          <p>Both appear after five settled calls. Voids are excluded — they have no outcome.</p>
+        </Section>
+
         <Section title="The week" image="/img/team-meeting.jpg">
           <p>
             The league runs Monday to Monday and resets at 00:00 UTC. A call belongs to the week its

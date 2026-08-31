@@ -132,6 +132,39 @@ export const calls = pgTable(
 );
 
 /** A participant. The wallet address IS the identity -- no accounts, no passwords. */
+/**
+ * A head-to-head challenge: two wallets, one window.
+ *
+ * This table records only the CHALLENGE — who challenged whom, on which
+ * window. It deliberately stores no outcome. Who won is derived from the
+ * `calls` table, which the indexer derives from chain fills, so a duel result
+ * cannot drift from the calls it is made of and there is nothing here for a
+ * client to lie about.
+ *
+ * The same anti-farming rule the leaderboard uses applies: each side's earliest
+ * call on the window is the one that counts.
+ */
+export const duels = pgTable(
+  "duels",
+  {
+    /** `${challenger}:${opponent}:${windowId}` — makes a repeat challenge a no-op. */
+    id: text("id").primaryKey(),
+    challenger: text("challenger").notNull(),
+    opponent: text("opponent").notNull(),
+    windowId: text("window_id").notNull(),
+    /** Copied from the window at creation, so expiry needs no join. */
+    closesAt: timestamp("closes_at", { withTimezone: true }).notNull(),
+    weekId: text("week_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("duels_challenger_idx").on(t.challenger),
+    index("duels_opponent_idx").on(t.opponent),
+    index("duels_window_idx").on(t.windowId),
+    index("duels_week_idx").on(t.weekId),
+  ],
+);
+
 export const wallets = pgTable(
   "wallets",
   {

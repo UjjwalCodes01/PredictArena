@@ -59,7 +59,6 @@ export async function POST(request: Request): Promise<NextResponse> {
   };
 
   // One JSON line per error — greppable, and what log aggregators expect.
-  // eslint-disable-next-line no-console -- this endpoint's whole purpose
   console.error(JSON.stringify(report));
 
   const dsn = process.env["SENTRY_DSN"];

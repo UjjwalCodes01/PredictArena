@@ -8,10 +8,10 @@
  */
 import { and, desc, eq, gte, inArray, isNotNull, lt, ne, or, sql } from "drizzle-orm";
 import type { Database } from "./client";
-import { calls, wallets, windows, syncState } from "./schema";
+import { calls, wallets, windows, duels, syncState } from "./schema";
 import type { NewCallRow, NewWindowRow, CallRow, WindowRow } from "./schema";
 import { computeStandings } from "./scoring";
-import type { CallStatus, ScorableCall, Standing } from "./types";
+import type { CallStatus, ScorableCall, Standing, Direction } from "./types";
 
 /** Statuses that will never change again. Everything else is the reconciler's job. */
 export const TERMINAL_STATUSES: readonly CallStatus[] = ["WON", "LOST", "VOID", "FAILED"];
@@ -482,6 +482,139 @@ export async function getDisplayNames(
   return out;
 }
 
+/** Why a challenge was refused. The UI switches on these. */
+export class DuelError extends Error {
+  constructor(readonly code: "SELF" | "WINDOW_CLOSED" | "NO_WINDOW" | "EXISTS", message: string) {
+    super(message);
+    this.name = "DuelError";
+  }
+}
+
+/** Stable id, so issuing the same challenge twice is one row, not two. */
+export function duelId(challenger: string, opponent: string, windowId: string): string {
+  return `${normalizeAddress(challenger)}:${normalizeAddress(opponent)}:${windowId}`;
+}
+
+/**
+ * Record a challenge.
+ *
+ * The CALLER must have verified a signature from the challenger first. This
+ * writes no outcome — who won is derived from calls at read time.
+ */
+export async function createDuel(
+  db: Database,
+  params: { challenger: string; opponent: string; windowId: string },
+): Promise<{ id: string }> {
+  const challenger = normalizeAddress(params.challenger);
+  const opponent = normalizeAddress(params.opponent);
+
+  if (challenger === opponent) {
+    throw new DuelError("SELF", "You cannot challenge yourself.");
+  }
+
+  const [window] = await db
+    .select({ id: windows.id, closesAt: windows.closesAt, weekId: windows.weekId })
+    .from(windows)
+    .where(eq(windows.id, params.windowId))
+    .limit(1);
+
+  if (!window) {
+    throw new DuelError("NO_WINDOW", "That window is not one we know about yet.");
+  }
+  // A challenge on a closed window can never be accepted, so refusing it up
+  // front is kinder than letting it expire the moment it is made.
+  if (window.closesAt.getTime() <= Date.now()) {
+    throw new DuelError("WINDOW_CLOSED", "That window has already closed.");
+  }
+
+  const id = duelId(challenger, opponent, params.windowId);
+  await db
+    .insert(duels)
+    .values({
+      id,
+      challenger,
+      opponent,
+      windowId: params.windowId,
+      closesAt: window.closesAt,
+      weekId: window.weekId,
+    })
+    // Re-issuing the same challenge is a no-op rather than an error: the user
+    // tapping twice means the same thing both times.
+    .onConflictDoNothing({ target: duels.id });
+
+  return { id };
+}
+
+export interface DuelRow {
+  id: string;
+  challenger: string;
+  opponent: string;
+  windowId: string;
+  closesAt: Date;
+  weekId: string;
+  createdAt: Date;
+  asset: string | null;
+  intervalSec: number | null;
+}
+
+/**
+ * Every duel a wallet is part of, newest first, with the window's asset joined
+ * so the UI can name it without a second query.
+ */
+export async function getDuelsForWallet(
+  db: Database,
+  wallet: string,
+  limit = 25,
+): Promise<DuelRow[]> {
+  const w = normalizeAddress(wallet);
+  const rows = await db
+    .select({
+      id: duels.id,
+      challenger: duels.challenger,
+      opponent: duels.opponent,
+      windowId: duels.windowId,
+      closesAt: duels.closesAt,
+      weekId: duels.weekId,
+      createdAt: duels.createdAt,
+      asset: windows.asset,
+      intervalSec: windows.intervalSec,
+    })
+    .from(duels)
+    .leftJoin(windows, eq(duels.windowId, windows.id))
+    .where(or(eq(duels.challenger, w), eq(duels.opponent, w)))
+    .orderBy(desc(duels.createdAt))
+    .limit(Math.min(limit, 100));
+  return rows;
+}
+
+/**
+ * Calls on the given windows by the given wallets — everything needed to
+ * resolve a batch of duels in one query rather than one per duel.
+ */
+export async function getCallsForDuels(
+  db: Database,
+  windowIds: readonly string[],
+  wallets: readonly string[],
+): Promise<Array<{ wallet: string; windowId: string; status: CallStatus; direction: Direction; placedAt: Date; id: string }>> {
+  if (windowIds.length === 0 || wallets.length === 0) return [];
+  return db
+    .select({
+      wallet: calls.wallet,
+      windowId: calls.windowId,
+      status: calls.status,
+      direction: calls.direction,
+      placedAt: calls.placedAt,
+      id: calls.id,
+    })
+    .from(calls)
+    .where(
+      and(
+        inArray(calls.windowId, [...new Set(windowIds)]),
+        inArray(calls.wallet, [...new Set(wallets.map(normalizeAddress))]),
+      ),
+    );
+}
+
 export async function getSyncState(db: Database, key: string) {
   const [row] = await db.select().from(syncState).where(eq(syncState.key, key)).limit(1);
   return row ?? null;
@@ -513,6 +646,10 @@ export async function getScorableCalls(db: Database, weekId: string): Promise<Sc
       placedAt: calls.placedAt,
       weekId: calls.weekId,
       closesAt: windows.closesAt,
+      // Together these give the price paid per contract, which is the
+      // probability the call asserted. Needed for Brier and edge.
+      stake: calls.stake,
+      quantity: calls.quantity,
     })
     .from(calls)
     .innerJoin(windows, eq(calls.windowId, windows.id))
@@ -524,6 +661,9 @@ export async function getScorableCalls(db: Database, weekId: string): Promise<Sc
     windowId: r.windowId,
     direction: r.direction,
     status: r.status,
+    // Numerics arrive as strings from the driver; money stays bigint.
+    stake: BigInt(r.stake ?? "0"),
+    quantity: BigInt(r.quantity ?? "0"),
     placedAtSec: secondsOf(r.placedAt),
     closesAtSec: secondsOf(r.closesAt),
     weekId: r.weekId,

@@ -40,6 +40,39 @@ const SETTLED = new Set(["WON", "LOST", "VOID"]);
  * week's calls alone -- which is what keeps a streak from spanning the Monday
  * reset.
  */
+/**
+ * Forecast-accuracy minimum. Below this a Brier score is noise, not a signal:
+ * one lucky longshot moves it more than genuine skill ever would.
+ */
+export const SKILL_MIN_SETTLED = 5;
+
+/** A "50% every time" forecaster scores exactly this. The line between skill and guessing. */
+export const BRIER_COIN_FLIP = 0.25;
+
+/**
+ * The probability a call asserted, as a fraction 0–1.
+ *
+ * On a binary venue the price paid IS the claim: buying UP at 0.62 asserts
+ * that UP is 62% likely. Price is stake divided by contracts.
+ *
+ * Returns null when no honest price can be derived — zero contracts, or a
+ * value outside (0,1] that fees or rounding could produce. A bad price must
+ * drop out of the average rather than poison it.
+ */
+export function impliedProbability(stake: bigint, quantity: bigint): number | null {
+  if (quantity <= 0n || stake <= 0n) return null;
+  // Scaled before dividing so integer division does not floor the result away.
+  const scaled = Number((stake * 1_000_000n) / quantity) / 1_000_000;
+  if (!Number.isFinite(scaled) || scaled <= 0 || scaled > 1) return null;
+  return scaled;
+}
+
+/** Round to `places`, avoiding the float dust that makes 0.1+0.2 embarrassing. */
+function round(value: number, places: number): number {
+  const f = 10 ** places;
+  return Math.round(value * f) / f;
+}
+
 export function computeStandings(calls: readonly ScorableCall[], weekId: string): Standing[] {
   // One scoring call per wallet per window (AGENTS.md section 5, anti-farming).
   // Extra calls still exist on-chain; they simply do not score. The EARLIEST
@@ -81,6 +114,27 @@ export function computeStandings(calls: readonly ScorableCall[], weekId: string)
     let streak = 0;
     let bestStreak = 0;
     let lastWinAtSec: number | null = null;
+    // Brier and edge inputs. Only calls with a derivable price contribute, so
+    // this count can be lower than `settled`.
+    let squaredErrorSum = 0;
+    let impliedSum = 0;
+    let pricedWins = 0;
+    let pricedCalls = 0;
+
+    /**
+     * Fold one settled call into the skill figures.
+     *
+     * `outcome` is 1 for a win, 0 for a loss. Voids never reach here: they have
+     * no outcome, so squaring an error against them would be meaningless.
+     */
+    const accumulate = (call: ScorableCall, outcome: 0 | 1): void => {
+      const p = impliedProbability(call.stake, call.quantity);
+      if (p === null) return;
+      squaredErrorSum += (p - outcome) ** 2;
+      impliedSum += p;
+      pricedCalls += 1;
+      if (outcome === 1) pricedWins += 1;
+    };
 
     for (const c of ordered) {
       switch (c.status) {
@@ -90,10 +144,12 @@ export function computeStandings(calls: readonly ScorableCall[], weekId: string)
           points += pointsForWin(streak);
           wins += 1;
           lastWinAtSec = c.closesAtSec;
+          accumulate(c, 1);
           break;
         case "LOST":
           streak = 0;
           losses += 1;
+          accumulate(c, 0);
           break;
         case "VOID":
           // Neither scores nor breaks the streak: a void refunds the stake, so
@@ -119,6 +175,17 @@ export function computeStandings(calls: readonly ScorableCall[], weekId: string)
       bestStreak,
       // Below the minimum the figure is noise, so the UI shows a dash instead.
       calibration: settled >= CALIBRATION_MIN_SETTLED ? round1((wins * 100) / settled) : null,
+      // Gated on PRICED calls, not settled ones: a call whose price could not
+      // be derived contributes to neither figure, so it must not count toward
+      // the threshold that says they are trustworthy.
+      brier:
+        pricedCalls >= SKILL_MIN_SETTLED ? round(squaredErrorSum / pricedCalls, 3) : null,
+      edge:
+        pricedCalls >= SKILL_MIN_SETTLED
+          ? round(((pricedWins - impliedSum) / pricedCalls) * 100, 1)
+          : null,
+      avgImplied:
+        pricedCalls >= SKILL_MIN_SETTLED ? round((impliedSum / pricedCalls) * 100, 1) : null,
       lastWinAtSec,
     });
   }

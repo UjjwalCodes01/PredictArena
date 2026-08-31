@@ -49,7 +49,6 @@ export async function register(): Promise<void> {
     .join(", ");
   const failed = results.filter((r) => r.status === "rejected").length;
 
-  // eslint-disable-next-line no-console -- start-up diagnostics belong on stdout
   console.log(
     `[warm-up] ${report} (${Date.now() - started}ms)` +
       (failed > 0 ? " — the request path will retry what did not warm" : ""),

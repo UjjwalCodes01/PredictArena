@@ -17,7 +17,8 @@ export {
   getOpenWindows, touchWallet, getSyncState, setSyncState, getScorableCalls,
   getStandings, getWalletCalls, getWindowsByIds, getRecentCalls, getLeagueTotals,
   getRecentlyClosedWindows,
-  upsertCalls, upsertWindows, touchWallets, setDisplayName, saveProfile, normalizeProfile, getWallet, getDisplayNames,
+  upsertCalls, upsertWindows, touchWallets,
+  createDuel, getDuelsForWallet, getCallsForDuels, duelId, DuelError, setDisplayName, saveProfile, normalizeProfile, getWallet, getDisplayNames,
   DISPLAY_NAME_RE, BIO_MAX, DisplayNameError, type ProfileInput,
   normalizeAddress, TERMINAL_STATUSES,
 } from "./queries";
@@ -29,3 +30,13 @@ export {
   CALIBRATION_MIN_SETTLED, POINTS_PER_WIN,
   type CallStatus, type Direction, type ScorableCall, type Standing,
 } from "./types";
+
+export {
+  resolveDuel,
+  tallyDuels,
+  type DuelState,
+  type DuelResult,
+  type DuelOutcome,
+  type DuelInput,
+  type DuelRecord,
+} from "./duels";

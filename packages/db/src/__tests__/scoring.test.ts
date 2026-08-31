@@ -24,6 +24,10 @@ function call(wallet: string, status: CallStatus, over: Partial<ScorableCall> = 
     placedAtSec: over.placedAtSec ?? 1_000_000 + seq * 100,
     closesAtSec: over.closesAtSec ?? 1_000_000 + seq * 100 + 60,
     weekId: over.weekId ?? WEEK,
+    // Default to an even-money call: 1 tUSDC buying 2 contracts is a price of
+    // 0.50, so existing tests keep their meaning and gain a neutral forecast.
+    stake: over.stake ?? 1_000_000n,
+    quantity: over.quantity ?? 2_000_000n,
     ...over,
   };
 }
@@ -264,7 +268,9 @@ describe("determinism", () => {
 
   it("does not mutate its input", () => {
     const calls = [call("0xA", "WON"), call("0xA", "LOST")];
-    const snapshot = JSON.parse(JSON.stringify(calls));
+    // Structural clone, not JSON: calls carry bigint amounts and
+    // JSON.stringify throws on those.
+    const snapshot = calls.map((c) => ({ ...c }));
     computeStandings(calls, WEEK);
     expect(calls).toEqual(snapshot);
   });
