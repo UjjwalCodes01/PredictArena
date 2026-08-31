@@ -484,11 +484,17 @@ export async function getDisplayNames(
 
 /** Why a challenge was refused. The UI switches on these. */
 export class DuelError extends Error {
-  constructor(readonly code: "SELF" | "WINDOW_CLOSED" | "NO_WINDOW" | "EXISTS", message: string) {
+  constructor(
+    readonly code: "SELF" | "WINDOW_CLOSED" | "NO_WINDOW" | "EXISTS" | "TOO_MANY",
+    message: string,
+  ) {
     super(message);
     this.name = "DuelError";
   }
 }
+
+/** Live challenges one wallet may hold at once. Generous for a person, hostile to a script. */
+export const MAX_OPEN_DUELS = 20;
 
 /** Stable id, so issuing the same challenge twice is one row, not two. */
 export function duelId(challenger: string, opponent: string, windowId: string): string {
@@ -503,7 +509,17 @@ export function duelId(challenger: string, opponent: string, windowId: string): 
  */
 export async function createDuel(
   db: Database,
-  params: { challenger: string; opponent: string; windowId: string },
+  params: {
+    challenger: string;
+    opponent: string;
+    windowId: string;
+    /**
+     * The window as read from the chain, used only when the projection has not
+     * caught up yet. Supplying it is what lets a challenge work during indexer
+     * lag; it is never taken from a client.
+     */
+    windowFallback?: { closesAt: Date; weekId: string; asset: string; pool: string; opensAt: Date };
+  },
 ): Promise<{ id: string }> {
   const challenger = normalizeAddress(params.challenger);
   const opponent = normalizeAddress(params.opponent);
@@ -518,14 +534,66 @@ export async function createDuel(
     .where(eq(windows.id, params.windowId))
     .limit(1);
 
-  if (!window) {
+  // The projection can lag the chain — the indexer may not have ingested a
+  // window the user is looking at right now. Refusing then would mean a window
+  // is visible in the UI but cannot be challenged on, which reads as broken.
+  //
+  // So the caller may supply the window as read FROM THE CHAIN, and it is
+  // recorded here. The chain is the source of truth; our table is a cache
+  // (CLAUDE.md rule 7).
+  const resolved = window ?? params.windowFallback;
+  if (!resolved) {
     throw new DuelError("NO_WINDOW", "That window is not one we know about yet.");
   }
   // A challenge on a closed window can never be accepted, so refusing it up
   // front is kinder than letting it expire the moment it is made.
-  if (window.closesAt.getTime() <= Date.now()) {
+  if (resolved.closesAt.getTime() <= Date.now()) {
     throw new DuelError("WINDOW_CLOSED", "That window has already closed.");
   }
+
+  // Record the window if we only learned of it from the chain, so the duel has
+  // something to join against and the indexer finds it already present.
+  if (!window && params.windowFallback) {
+    const f = params.windowFallback;
+    await db
+      .insert(windows)
+      .values({
+        id: params.windowId,
+        asset: f.asset,
+        pool: f.pool,
+        opensAt: f.opensAt,
+        closesAt: f.closesAt,
+        weekId: f.weekId,
+      })
+      .onConflictDoNothing({ target: windows.id });
+  }
+
+  // If the OTHER side already challenged on this window, that is the same
+  // contest. Return it rather than creating a mirror row — two rows would
+  // double-count in every head-to-head record, and mutual challenges are
+  // exactly what a social feature invites.
+  // A cap on challenges still awaiting their window. Rate limiting slows a
+  // script down; it does not stop one from accumulating rows all day. Only
+  // OPEN challenges count, so an active player is never blocked by their own
+  // history.
+  const [pending] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(duels)
+    .where(and(eq(duels.challenger, challenger), gte(duels.closesAt, new Date())));
+  if ((pending?.n ?? 0) >= MAX_OPEN_DUELS) {
+    throw new DuelError(
+      "TOO_MANY",
+      `You already have ${MAX_OPEN_DUELS} challenges waiting. Let some settle first.`,
+    );
+  }
+
+  const reverseId = duelId(opponent, challenger, params.windowId);
+  const [existing] = await db
+    .select({ id: duels.id })
+    .from(duels)
+    .where(eq(duels.id, reverseId))
+    .limit(1);
+  if (existing) return { id: existing.id };
 
   const id = duelId(challenger, opponent, params.windowId);
   await db
@@ -535,8 +603,8 @@ export async function createDuel(
       challenger,
       opponent,
       windowId: params.windowId,
-      closesAt: window.closesAt,
-      weekId: window.weekId,
+      closesAt: resolved.closesAt,
+      weekId: resolved.weekId,
     })
     // Re-issuing the same challenge is a no-op rather than an error: the user
     // tapping twice means the same thing both times.

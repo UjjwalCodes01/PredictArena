@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { verifyMessage } from "viem";
 import {
-  createDuel, getDuelsForWallet, getCallsForDuels, resolveDuel, tallyDuels,
+  createDuel, getDuelsForWallet, getCallsForDuels, resolveDuel, tallyDuels, contestKey,
   DuelError, normalizeAddress, type DuelOutcome,
 } from "@predictarena/db";
-import { serverDb, dbRead } from "@/lib/server";
+import { serverDb, serverDex, dbRead, withDeadline } from "@/lib/server";
+import { getWindow } from "@predictarena/dex";
+import { weekIdForClose } from "@predictarena/db";
 import { rateLimit, clientKey, tooManyRequests } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
@@ -66,7 +68,19 @@ export async function GET(request: Request): Promise<NextResponse> {
     );
 
     const nowSec = Math.floor(Date.now() / 1000);
-    const resolved = rows.map((r) => {
+
+    // Collapse a mutual challenge to one entry. Rows created before that was
+    // prevented at write time still exist, and showing the same contest twice
+    // would look like a bug to the person reading it.
+    const seenContest = new Set<string>();
+    const unique = rows.filter((r) => {
+      const key = contestKey(r.challenger, r.opponent, r.windowId);
+      if (seenContest.has(key)) return false;
+      seenContest.add(key);
+      return true;
+    });
+
+    const resolved = unique.map((r) => {
       const outcome: DuelOutcome = resolveDuel(
         {
           challenger: r.challenger,
@@ -109,6 +123,8 @@ export async function GET(request: Request): Promise<NextResponse> {
           resolved.map(({ row, outcome }) => ({
             challenger: row.challenger,
             opponent: row.opponent,
+            // Lets the tally collapse a mutual challenge into one contest.
+            windowId: row.windowId,
             outcome,
           })),
         ),
@@ -177,7 +193,35 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   try {
-    const { id } = await createDuel(serverDb(), { challenger, opponent, windowId });
+    // Read the window from the CHAIN, not from a client claim, so a challenge
+    // works even while the indexer is behind — otherwise a window visible in
+    // the UI could not be challenged on, which reads as the feature being
+    // broken rather than the projection being late.
+    let windowFallback: Parameters<typeof createDuel>[1]["windowFallback"];
+    try {
+      const w = await withDeadline("getWindow", 12_000, () =>
+        getWindow(serverDex(), windowId as `0x${string}`),
+      );
+      if (w) {
+        windowFallback = {
+          closesAt: new Date(w.closesAtSec * 1000),
+          opensAt: new Date(w.opensAtSec * 1000),
+          weekId: weekIdForClose(w.closesAtSec),
+          asset: w.asset,
+          pool: w.pool,
+        };
+      }
+    } catch {
+      // Chain unreachable: fall through and let the projection answer. If it
+      // has the window the challenge still works.
+    }
+
+    const { id } = await createDuel(serverDb(), {
+      challenger,
+      opponent,
+      windowId,
+      ...(windowFallback ? { windowFallback } : {}),
+    });
     return NextResponse.json({ id }, { headers: { "cache-control": "no-store" } });
   } catch (e) {
     if (e instanceof DuelError) {

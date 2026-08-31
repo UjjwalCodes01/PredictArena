@@ -149,14 +149,36 @@ export interface DuelRecord {
   readonly expired: number;
 }
 
+/**
+ * Canonical key for a contest: the same two wallets on the same window, in
+ * either direction.
+ *
+ * A challenges B, then B challenges A on the same window — that is one fight,
+ * and a social feature invites exactly that. Sorting the pair makes both rows
+ * collapse to one key.
+ */
+export function contestKey(a: string, b: string, windowId: string): string {
+  const [x, y] = [a.toLowerCase(), b.toLowerCase()].sort();
+  return `${x}:${y}:${windowId}`;
+}
+
 export function tallyDuels(
   wallet: string,
-  duels: ReadonlyArray<{ challenger: string; opponent: string; outcome: DuelOutcome }>,
+  duels: ReadonlyArray<{ challenger: string; opponent: string; windowId?: string; outcome: DuelOutcome }>,
 ): DuelRecord {
   const me = wallet.toLowerCase();
   let won = 0, lost = 0, drawn = 0, open = 0, expired = 0;
 
+  // Count each contest once. Both rows resolve identically, so keeping the
+  // first is safe — what matters is not counting it twice.
+  const counted = new Set<string>();
+
   for (const d of duels) {
+    if (d.windowId !== undefined) {
+      const key = contestKey(d.challenger, d.opponent, d.windowId);
+      if (counted.has(key)) continue;
+      counted.add(key);
+    }
     const isChallenger = d.challenger.toLowerCase() === me;
     const isOpponent = d.opponent.toLowerCase() === me;
     // A duel this wallet is not part of contributes nothing, rather than

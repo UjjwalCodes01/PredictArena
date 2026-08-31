@@ -34,6 +34,7 @@ export {
 export {
   resolveDuel,
   tallyDuels,
+  contestKey,
   type DuelState,
   type DuelResult,
   type DuelOutcome,

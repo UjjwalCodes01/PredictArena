@@ -192,3 +192,26 @@ describe("tally", () => {
     expect(tallyDuels(A, list)).toMatchObject({ open: 1, expired: 1 });
   });
 });
+
+describe("a mutual challenge is ONE contest, not two", () => {
+  /**
+   * A challenges B on window W; B, not realising, challenges A on the same
+   * window. That is one fight. Counting it twice would double every mutual
+   * duel in a head-to-head record — and mutual challenges are exactly what a
+   * social feature encourages.
+   */
+  it("tallies the same pair on the same window once", () => {
+    const forward = resolveDuel(duel([c(A, "WON"), c(B, "LOST")]), AFTER);
+    const list = [
+      { challenger: A, opponent: B, windowId: "w1", outcome: forward },
+      // The reverse row: same window, same people, roles swapped.
+      { challenger: B, opponent: A, windowId: "w1", outcome: resolveDuel(
+        { challenger: B, opponent: A, windowId: "w1", closesAtSec: CLOSES,
+          calls: [c(A, "WON"), c(B, "LOST")] },
+        AFTER,
+      ) },
+    ];
+    // A won the contest. Counted once, that is 1 win — not 1 win twice.
+    expect(tallyDuels(A, list).won).toBe(1);
+  });
+});

@@ -70,7 +70,17 @@ export function ChallengeButton({ opponent }: { opponent: string }) {
       });
       const body = await r.json();
       if (!r.ok) {
-        setError({ message: body.message ?? "Could not issue that challenge.", action: body.action });
+        setError({
+          message: body.message ?? "Could not issue that challenge.",
+          // TOO_MANY is self-explanatory; the others benefit from a next step.
+          action:
+            body.action ??
+            (body.code === "WINDOW_CLOSED"
+              ? "Pick a window with more time left."
+              : body.code === "NO_WINDOW"
+                ? "That window is not indexed yet. Try another."
+                : undefined),
+        });
         return;
       }
       setSent(true);
