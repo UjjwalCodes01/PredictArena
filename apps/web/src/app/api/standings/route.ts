@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getStandings, currentWeekId, weekStartUtc, getDisplayNames } from "@predictarena/db";
-import { serverDb, dbRead } from "@/lib/server";
+import { serverDb, dbRead, aiWallet } from "@/lib/server";
 import { rateLimit, clientKey, tooManyRequests } from "@/lib/rateLimit";
 import { cached } from "@/lib/cache";
 import type { StandingsResponse } from "@/lib/types";
@@ -43,10 +43,17 @@ export async function GET(request: Request): Promise<NextResponse> {
     const names = await cached(`names:${weekId}`, 6_000, () =>
       dbRead(() => getDisplayNames(db, standings.map((s) => s.wallet))),
     );
+    // Stamped here, from the server's own configuration. A browser cannot
+    // claim to be the forecaster because it never gets to say who is.
+    const ai = aiWallet()?.toLowerCase() ?? null;
     const body: StandingsResponse = {
       weekId,
       weekStartIso: weekStartUtc(weekId).toISOString(),
-      standings: standings.map((s) => ({ ...s, displayName: names.get(s.wallet) ?? null })),
+      standings: standings.map((s) => ({
+        ...s,
+        displayName: names.get(s.wallet) ?? null,
+        isAi: ai !== null && s.wallet.toLowerCase() === ai,
+      })),
     };
     return NextResponse.json(body, { headers: { "cache-control": "no-store" } });
   } catch (e) {

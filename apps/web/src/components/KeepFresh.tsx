@@ -26,6 +26,12 @@ export function KeepFresh() {
       void fetch("/api/tick", { cache: "no-store" }).catch(() => {
         /* best effort; the UI already reports staleness on its own */
       });
+      // The forecaster runs off the same traffic, on its own far slower gate:
+      // that endpoint spends API tokens and testnet collateral, so it throttles
+      // globally in the database rather than trusting this interval.
+      void fetch("/api/ai/run", { cache: "no-store" }).catch(() => {
+        /* the AI page reports its own state; a failed poke changes nothing */
+      });
     };
 
     poke();

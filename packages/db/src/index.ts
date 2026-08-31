@@ -9,7 +9,8 @@ export { createDb, createSql, DbConfigError, schema, type Database } from "./cli
 export {
   windows, calls, wallets, syncState, callStatus, direction, windowStatus,
   type WindowRow, type NewWindowRow, type CallRow, type NewCallRow,
-  type WalletRow, type SyncStateRow,
+  forecasts, forecastAction,
+  type WalletRow, type SyncStateRow, type ForecastRow, type NewForecastRow,
 } from "./schema";
 
 export {
@@ -23,7 +24,17 @@ export {
   normalizeAddress, TERMINAL_STATUSES,
 } from "./queries";
 
-export { computeStandings, streakMultiplierX10, pointsForWin } from "./scoring";
+export {
+  forecastId, recordForecast, linkForecastTx, forecastedWindowIds,
+  getRecentForecasts, getForecastForWindow, getForecastsForWindows, getForecastSummary,
+  getResolvedHistory,
+  type ForecastSummary,
+} from "./forecasts";
+
+export {
+  computeStandings, streakMultiplierX10, pointsForWin,
+  impliedProbability, SKILL_MIN_SETTLED, BRIER_COIN_FLIP,
+} from "./scoring";
 export { isoWeekId, weekIdForClose, weekStartUtc, currentWeekId } from "./week";
 
 export {

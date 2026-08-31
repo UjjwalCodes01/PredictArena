@@ -21,6 +21,7 @@ const PRIMARY = [
   { href: "/markets", label: "Markets" },
   { href: "/terminal", label: "Terminal" },
   { href: "/leaderboard", label: "Leaderboard" },
+  { href: "/ai", label: "AI player" },
   { href: "/activity", label: "Activity" },
 ] as const;
 

@@ -87,7 +87,7 @@ export default function LeaderboardPage() {
           <div className="flex items-center justify-between gap-3">
             <span className="tabular w-8 text-sm text-ink-soft">#{myRow.rank}</span>
             <div className="min-w-0 flex-1">
-              <PlayerIdentity address={myRow.wallet} displayName={myRow.displayName} you link={false} />
+              <PlayerIdentity address={myRow.wallet} displayName={myRow.displayName} you link={false} ai={myRow.isAi ?? false} />
             </div>
             <span className="tabular text-sm font-semibold text-ink">{myRow.points}</span>
           </div>
@@ -179,6 +179,7 @@ export default function LeaderboardPage() {
                     address={s.wallet}
                     displayName={s.displayName}
                     you={me === s.wallet.toLowerCase()}
+                    ai={s.isAi ?? false}
                   />
                   {/* Below md the stats read as one line under the name; from md
                       up they become their own columns, which is what the extra

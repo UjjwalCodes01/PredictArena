@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@predictarena/ai": "workspace:*",
     "@predictarena/db": "workspace:*",
     "@predictarena/dex": "workspace:*",
     "@predictarena/indexer": "workspace:*",

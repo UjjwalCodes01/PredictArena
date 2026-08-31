@@ -17,12 +17,15 @@ export function PlayerIdentity({
   size = 32,
   link = true,
   you = false,
+  ai = false,
 }: {
   address: string;
   displayName?: string | null;
   size?: number;
   link?: boolean;
   you?: boolean;
+  /** Marks the AI forecaster. A label only — it is scored like everyone else. */
+  ai?: boolean;
 }) {
   const inner = (
     <span className="flex min-w-0 items-center gap-2.5">
@@ -33,6 +36,14 @@ export function PlayerIdentity({
             {displayName ?? shortAddress(address)}
           </span>
           {you ? <span className="shrink-0 text-xs font-normal text-accent">You</span> : null}
+          {ai ? (
+            <span
+              className="label shrink-0 rounded-sm bg-surface-2 px-1 py-0.5 text-ink-soft"
+              title="The AI forecaster. Same board, same rules, same scoring."
+            >
+              AI
+            </span>
+          ) : null}
         </span>
         {displayName ? (
           <span className="tabular block truncate text-xs text-ink-faint">

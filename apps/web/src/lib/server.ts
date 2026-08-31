@@ -10,6 +10,7 @@ import "server-only";
  */
 import { createDexClient, assertLiveNetwork, type DexClient } from "@predictarena/dex";
 import { createDb, type Database } from "@predictarena/db";
+import { privateKeyToAccount } from "viem/accounts";
 
 let dexSingleton: DexClient | null = null;
 let verified: Promise<unknown> | null = null;
@@ -109,4 +110,47 @@ export async function withDeadline<T>(
   } finally {
     if (timer) clearTimeout(timer);
   }
+}
+
+/**
+ * The AI forecaster's signer, and its address.
+ *
+ * A SEPARATE client from `serverDex()`, because this one holds a private key
+ * and that key must never be attached to the client every other route uses.
+ * A read path that cannot sign cannot accidentally place an order.
+ *
+ * Returns null when the forecaster is not configured, which is a supported
+ * state: the site runs without it and says so.
+ */
+let aiSingleton: { dex: DexClient; wallet: `0x${string}` } | null = null;
+
+export function aiDex(): { dex: DexClient; wallet: `0x${string}` } | null {
+  if (aiSingleton) return aiSingleton;
+
+  const key = process.env["AI_PRIVATE_KEY"];
+  if (!key || !/^0x[0-9a-fA-F]{64}$/.test(key)) return null;
+
+  const account = privateKeyToAccount(key as `0x${string}`);
+  aiSingleton = {
+    dex: createDexClient({
+      indexerUrl: process.env["INDEXER_URL"] ?? "https://dev.smk.somnia.host/v1/graphql",
+      rpcHttpUrl: process.env["RPC_HTTP_URL"] ?? "https://dream-rpc.somnia.network",
+      rpcWsUrl: process.env["RPC_WS_URL"] ?? "wss://dream-rpc.somnia.network/ws",
+      privateKey: key as `0x${string}`,
+    }),
+    wallet: account.address,
+  };
+  return aiSingleton;
+}
+
+/**
+ * The forecaster's address without constructing a signer.
+ *
+ * Read paths need it to look up its standing and its log; they have no reason
+ * to hold a key to do that.
+ */
+export function aiWallet(): `0x${string}` | null {
+  const key = process.env["AI_PRIVATE_KEY"];
+  if (!key || !/^0x[0-9a-fA-F]{64}$/.test(key)) return null;
+  return privateKeyToAccount(key as `0x${string}`).address;
 }

@@ -17,6 +17,7 @@
     "doctor": "tsx scripts/doctor.ts",
     "survey": "tsx scripts/survey.ts",
     "smoke": "tsx scripts/smoke.ts",
+    "ai:probe": "tsx scripts/ai-probe.ts",
     "verify-api": "tsx scripts/verify-api.ts",
     "claim": "tsx scripts/claim.ts",
     "gate": "tsx scripts/gate.ts",
@@ -29,6 +30,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@predictarena/ai": "workspace:*",
     "@predictarena/dex": "workspace:*",
     "@somnia-chain/markets-sdk": "^0.28.1",
     "dotenv": "^17.2.3",

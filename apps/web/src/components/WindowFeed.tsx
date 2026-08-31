@@ -13,6 +13,7 @@ import type { WindowsResponse, WindowDto } from "@/lib/types";
 import { countdown, seriesLabel } from "@/lib/format";
 import { useServerClock, useTick } from "@/hooks/useServerClock";
 import { CallPanel } from "./CallPanel";
+import { AiRead } from "./AiRead";
 import { Card, Panel, ErrorNote, Skeleton, Empty, LiveDot } from "./ui";
 
 const ASSETS = ["BTC", "ETH"] as const;
@@ -175,6 +176,9 @@ export function WindowFeed({ onPlaced }: { onPlaced: () => void }) {
             onPlaced={handlePlaced}
             onWindowClosed={handleWindowClosed}
           />
+
+          {/* Renders nothing unless the forecaster has looked at this window. */}
+          <AiRead windowId={chosen.marketId} />
 
           {/*
             What comes next. Two honest cases, and no invented times:

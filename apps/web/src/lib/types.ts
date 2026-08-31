@@ -76,6 +76,14 @@ export interface StandingDto {
   /** Mean probability the market charged, 0-100. Context for `edge`. */
   avgImplied: number | null;
   lastWinAtSec: number | null;
+  /**
+   * Is this the AI forecaster?
+   *
+   * Decided on the SERVER from the configured wallet, never sent up by a
+   * browser — otherwise anyone could wear the badge. It is a label only: the AI
+   * is scored by the identical engine and gets no separate treatment anywhere.
+   */
+  isAi?: boolean;
 }
 
 export interface StandingsResponse {
@@ -99,4 +107,50 @@ export interface ApiError {
   code: string;
   message: string;
   action?: string;
+}
+
+/** One recorded estimate from the AI forecaster, shaped for display. */
+export interface ForecastDto {
+  readonly windowId: string;
+  readonly asset: string;
+  /** Probability of UP in basis points. 5000 = 50%. */
+  readonly probabilityUpBps: number;
+  readonly confidence: "LOW" | "MEDIUM" | "HIGH";
+  readonly rationale: string;
+  readonly keyFactors: readonly string[];
+  readonly action: "PLACE" | "PASS";
+  readonly passReason: string | null;
+  readonly side: "UP" | "DOWN" | null;
+  /** What the book was asking at the time, in basis points. Null if unknown. */
+  readonly askUpBps: number | null;
+  readonly askDownBps: number | null;
+  /** Signed edge in basis points. Negative means the market charged more. */
+  readonly edgeBps: number | null;
+  readonly txHash: string | null;
+  readonly closesAtSec: number;
+  readonly createdAtSec: number;
+  /** Filled in from `calls` once the window settles. Never stored alongside. */
+  readonly outcome: "WON" | "LOST" | "VOID" | "PENDING" | null;
+}
+
+export interface AiResponse {
+  /** False when no API key is set. The page says so rather than looking broken. */
+  readonly configured: boolean;
+  readonly wallet: string | null;
+  readonly weekId: string;
+  /** The forecaster's row on the same leaderboard as everyone else. */
+  readonly standing: StandingDto | null;
+  /** Median Brier across human players with enough settled calls. */
+  readonly fieldBrier: number | null;
+  readonly fieldEdge: number | null;
+  readonly rankedPlayers: number;
+  readonly summary: { total: number; placed: number; passed: number };
+  /**
+   * What a "50% every time" forecaster scores. Sent from the server rather
+   * than imported: pulling it from `@predictarena/db` in a client component
+   * dragged the Neon driver into the browser bundle, which the bundle guard
+   * caught. One source of truth, no client import.
+   */
+  readonly coinFlipBrier: number;
+  readonly forecasts: readonly ForecastDto[];
 }

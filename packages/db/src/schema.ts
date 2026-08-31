@@ -165,6 +165,70 @@ export const duels = pgTable(
   ],
 );
 
+/** What the forecaster decided to do about its own estimate. */
+export const forecastAction = pgEnum("forecast_action", ["PLACE", "PASS"]);
+
+/**
+ * The AI forecaster's reasoning log.
+ *
+ * This is the one table here that is NOT a projection of chain truth, because
+ * it records something that has no on-chain representation: what the model
+ * asserted, and why, BEFORE the window resolved.
+ *
+ * Two rules keep that from becoming a loophole:
+ *
+ *  1. Nothing here decides an outcome. Whether the AI won is read from `calls`,
+ *     which the indexer derives from chain fills, exactly as for every human
+ *     player. A row here cannot make a loss look like a win.
+ *
+ *  2. Rows are written once, before the close, and never revised. The market
+ *     prices are stored alongside the estimate so a forecast can always be
+ *     judged against what the market was actually charging at the time —
+ *     which is the only way "it had an edge" means anything after the fact.
+ *
+ * The AI is otherwise an ordinary wallet: it places real calls on the real
+ * venue and the same pure scoring engine ranks it against everyone else.
+ */
+export const forecasts = pgTable(
+  "forecasts",
+  {
+    /** `${wallet}:${windowId}` — one estimate per forecaster per window. */
+    id: text("id").primaryKey(),
+    wallet: text("wallet").notNull(),
+    windowId: text("window_id").notNull(),
+    asset: text("asset").notNull(),
+    /** Probability of UP in basis points, 0-10000. Integer: never a float. */
+    probabilityUpBps: integer("probability_up_bps").notNull(),
+    confidence: text("confidence").notNull(),
+    rationale: text("rationale").notNull(),
+    /** JSON-encoded array of short phrases. Display only. */
+    keyFactors: text("key_factors"),
+    action: forecastAction("action").notNull(),
+    /** Why it declined: NO_EDGE, NO_BOOK, PRICE_EXTREME, BUDGET_SPENT... */
+    passReason: text("pass_reason"),
+    side: direction("side"),
+    /**
+     * The book at the moment of the forecast, base units. Stored so the edge
+     * claim stays checkable once the book has moved on.
+     */
+    askUp: numeric("ask_up", { precision: 78, scale: 0 }),
+    askDown: numeric("ask_down", { precision: 78, scale: 0 }),
+    /** Signed edge in base units; negative means the market was charging more. */
+    edge: numeric("edge", { precision: 78, scale: 0 }),
+    /** Set only when a call was actually placed. Links to `calls.tx_hash`. */
+    txHash: text("tx_hash"),
+    closesAt: timestamp("closes_at", { withTimezone: true }).notNull(),
+    weekId: text("week_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("forecasts_wallet_idx").on(t.wallet),
+    index("forecasts_window_idx").on(t.windowId),
+    index("forecasts_created_idx").on(t.createdAt),
+    index("forecasts_week_idx").on(t.weekId),
+  ],
+);
+
 export const wallets = pgTable(
   "wallets",
   {
@@ -221,4 +285,6 @@ export type NewWindowRow = typeof windows.$inferInsert;
 export type CallRow = typeof calls.$inferSelect;
 export type NewCallRow = typeof calls.$inferInsert;
 export type WalletRow = typeof wallets.$inferSelect;
+export type ForecastRow = typeof forecasts.$inferSelect;
+export type NewForecastRow = typeof forecasts.$inferInsert;
 export type SyncStateRow = typeof syncState.$inferSelect;
