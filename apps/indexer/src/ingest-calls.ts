@@ -17,7 +17,7 @@
  *     orders. Counting makers would put bots on the league table.
  */
 import type { DexClient } from "@predictarena/dex";
-import { upsertCall, touchWallet, weekIdForClose, normalizeAddress, type Database, type NewCallRow, getRecentlyClosedWindows } from "@predictarena/db";
+import { upsertCalls, touchWallets, weekIdForClose, normalizeAddress, type Database, type NewCallRow, getRecentlyClosedWindows } from "@predictarena/db";
 import type { CallStatus, Direction } from "@predictarena/db";
 import { log } from "./log";
 
@@ -179,6 +179,12 @@ export async function ingestCalls(
       settledAt = new Date();
     }
 
+    // Collected, then written in one statement per window. Writing them one at
+    // a time cost two sequential round trips per call — the single biggest
+    // cost in ingestion, and what made the serverless path time out.
+    const rows: NewCallRow[] = [];
+    const walletsSeen: string[] = [];
+
     for (const c of byCall.values()) {
       const row: NewCallRow = {
         // The window belongs in the identity: one batch transaction can trade
@@ -196,15 +202,20 @@ export async function ingestCalls(
         settledAt,
         weekId: weekIdForClose(w.closesAtSec),
       };
+      rows.push(row);
+      walletsSeen.push(c.wallet);
+    }
+
+    if (rows.length > 0) {
       try {
-        await touchWallet(db, c.wallet);
-        await upsertCall(db, row);
-        result.callsWritten += 1;
+        // Wallets first: calls reference them.
+        await touchWallets(db, walletsSeen);
+        result.callsWritten += await upsertCalls(db, rows);
       } catch (e) {
-        result.errors += 1;
+        result.errors += rows.length;
         log.warn(
-          { txHash: c.txHash, wallet: c.wallet, err: e instanceof Error ? e.message : String(e) },
-          "call upsert failed",
+          { windowId: w.marketId, calls: rows.length, err: e instanceof Error ? e.message : String(e) },
+          "batch call upsert failed",
         );
       }
     }

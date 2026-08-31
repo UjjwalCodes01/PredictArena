@@ -133,7 +133,33 @@ export async function getTopOfBook(client: DexClient, pool: `0x${string}`): Prom
  *
  * Exported so the behaviour is testable rather than buried in a catch block.
  */
+/**
+ * Selector for `ImmediateOrCancelNoFill()`, the venue's "nothing to fill
+ * against" revert.
+ *
+ * Matched explicitly because the message text is NOT reliable: a revert often
+ * reaches us as a bare `Custom error: 0xd48c4403` with no decoded name, and a
+ * text-only check silently missed it. The user then saw the generic "the
+ * window locked or the price moved", which is wrong and unactionable.
+ */
+const IOC_NO_FILL_SELECTOR = "0xd48c4403";
+
+/** Pull revert data out of a viem/SDK error, wherever in the cause chain it sits. */
+function revertSelector(e: unknown): string | null {
+  let cur: unknown = e;
+  for (let depth = 0; depth < 8 && cur; depth += 1) {
+    const o = cur as { data?: unknown; cause?: unknown };
+    const d = typeof o.data === "string" ? o.data : (o.data as { data?: string } | undefined)?.data;
+    if (typeof d === "string" && d.startsWith("0x") && d.length >= 10) return d.slice(0, 10);
+    cur = o.cause;
+  }
+  // Last resort: the selector often survives inside the message text.
+  const m = /0x[0-9a-f]{8}\b/i.exec(String(e));
+  return m ? m[0].toLowerCase() : null;
+}
+
 export function isUnfillable(e: unknown): boolean {
+  if (revertSelector(e) === IOC_NO_FILL_SELECTOR) return true;
   return /immediateorcancel|\bioc\b/i.test(String(e));
 }
 

@@ -6,7 +6,7 @@
  * never argues with it.
  */
 import { getWindows, MarketStatus, type DexClient } from "@predictarena/dex";
-import { upsertWindow, weekIdForClose, type Database, type NewWindowRow } from "@predictarena/db";
+import { upsertWindows, weekIdForClose, type Database, type NewWindowRow } from "@predictarena/db";
 import { log } from "./log";
 
 /** Map the on-chain numeric status onto the row enum we store. */
@@ -39,6 +39,7 @@ export async function ingestWindows(dex: DexClient, db: Database, assets?: reado
   let seen = 0;
   let written = 0;
   const ingested: IngestedWindow[] = [];
+  const rows: NewWindowRow[] = [];
 
   for (const asset of targets) {
     const windows = await getWindows(dex, {
@@ -67,14 +68,18 @@ export async function ingestWindows(dex: DexClient, db: Database, assets?: reado
         // Decided once, from the CLOSE time -- the league boundary the UI states.
         weekId: weekIdForClose(w.closesAtSec),
       };
-      await upsertWindow(db, row);
-      written += 1;
+      rows.push(row);
       ingested.push({
         marketId: w.marketId, pool: w.pool, asset: w.asset, closesAtSec: w.closesAtSec,
         resolved: w.onchain.isResolved, voided: w.onchain.isVoided, winningOutcome: w.onchain.winningOutcome,
       });
     }
   }
+
+  // One statement rather than one per window. Writing them individually cost a
+  // round trip each -- about six seconds for a normal pass, which is what
+  // pushed the serverless ingest leg past its deadline.
+  written = await upsertWindows(db, rows);
 
   log.debug({ seen, written }, "ingested windows");
   return { seen, written, windows: ingested };

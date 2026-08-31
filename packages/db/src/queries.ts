@@ -39,6 +39,71 @@ export async function upsertWindow(db: Database, row: NewWindowRow): Promise<voi
  * Record a call. Keyed on `tx_hash`, so ingesting the same transaction twice
  * updates rather than duplicates.
  */
+/**
+ * Write many calls in ONE statement. See `touchWallets` for why.
+ *
+ * Chunked, because a single statement with thousands of rows can exceed the
+ * driver's parameter limit — a failure that only shows up under exactly the
+ * load where batching matters most.
+ */
+export async function upsertCalls(db: Database, rows: readonly NewCallRow[]): Promise<number> {
+  if (rows.length === 0) return 0;
+  const CHUNK = 100;
+  let written = 0;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const chunk = rows.slice(i, i + CHUNK);
+    await db
+      .insert(calls)
+      .values([...chunk])
+      .onConflictDoUpdate({
+        target: [calls.txHash, calls.windowId, calls.direction],
+        set: {
+          status: sql`excluded.status`,
+          quantity: sql`excluded.quantity`,
+          settledAt: sql`excluded.settled_at`,
+          payout: sql`excluded.payout`,
+          redeemTxHash: sql`excluded.redeem_tx_hash`,
+          updatedAt: new Date(),
+        },
+      });
+    written += chunk.length;
+  }
+  return written;
+}
+
+/**
+ * Write many windows in ONE statement.
+ *
+ * Same reason as `upsertCalls`: the per-row version costs a round trip each,
+ * and ingest writes ~23 of them per pass. Against a database an ocean away
+ * that alone was ~6s, and it pushed the serverless ingest leg past its
+ * deadline.
+ */
+export async function upsertWindows(db: Database, rows: readonly NewWindowRow[]): Promise<number> {
+  if (rows.length === 0) return 0;
+  const CHUNK = 100;
+  let written = 0;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const chunk = rows.slice(i, i + CHUNK);
+    await db
+      .insert(windows)
+      .values([...chunk])
+      .onConflictDoUpdate({
+        target: windows.id,
+        set: {
+          status: sql`excluded.status`,
+          strike: sql`excluded.strike`,
+          winningOutcome: sql`excluded.winning_outcome`,
+          resolvedAt: sql`excluded.resolved_at`,
+          pool: sql`excluded.pool`,
+          updatedAt: new Date(),
+        },
+      });
+    written += chunk.length;
+  }
+  return written;
+}
+
 export async function upsertCall(db: Database, row: NewCallRow): Promise<void> {
   await db
     .insert(calls)
@@ -187,6 +252,25 @@ export async function getOpenWindows(db: Database, limit = 200): Promise<WindowR
  * checksum casing at the edge.
  */
 export const normalizeAddress = (address: string): string => address.trim().toLowerCase();
+
+/**
+ * Record many wallets in ONE statement.
+ *
+ * The per-wallet version costs a round trip each, and ingestion calls it once
+ * per call it writes. Against a database an ocean away that dominated
+ * everything: two sequential round trips per call, ~500ms, so sixty calls took
+ * thirty seconds and the serverless ingest leg timed out having written
+ * nothing. Batching turns that into one statement.
+ */
+export async function touchWallets(db: Database, addresses: readonly string[]): Promise<void> {
+  const unique = [...new Set(addresses.map(normalizeAddress))];
+  if (unique.length === 0) return;
+  const now = new Date();
+  await db
+    .insert(wallets)
+    .values(unique.map((address) => ({ address, firstSeenAt: now, lastSeenAt: now })))
+    .onConflictDoUpdate({ target: wallets.address, set: { lastSeenAt: now } });
+}
 
 export async function touchWallet(db: Database, address: string): Promise<void> {
   const now = new Date();

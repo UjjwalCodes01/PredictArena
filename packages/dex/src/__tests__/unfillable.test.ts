@@ -39,3 +39,31 @@ describe("isUnfillable", () => {
     expect(isUnfillable({ reason: "ImmediateOrCancel" })).toBe(false);
   });
 });
+
+describe("recognising it from the SELECTOR, not just the text", () => {
+  /**
+   * A revert frequently arrives as a bare `Custom error: 0xd48c4403` with no
+   * decoded name. A text-only check missed it, and the user got the generic
+   * "the window locked or the price moved" — wrong, and nothing they could act
+   * on. Selector 0xd48c4403 is `ImmediateOrCancelNoFill()`.
+   */
+  it("matches when the selector is nested in the error's data", () => {
+    const err = { message: "reverted", cause: { data: "0xd48c4403" } };
+    expect(isUnfillable(err)).toBe(true);
+  });
+
+  it("matches when the selector only appears in the message", () => {
+    expect(isUnfillable(new Error("Transaction failed on-chain: Custom error: 0xd48c4403"))).toBe(true);
+  });
+
+  it("matches through a nested data.data shape", () => {
+    const err = { cause: { cause: { data: { data: "0xd48c4403000000" } } } };
+    expect(isUnfillable(err)).toBe(true);
+  });
+
+  it("does NOT match a different custom error", () => {
+    // 0xfb8f41b2 is ERC20InsufficientAllowance — a real, different problem
+    // that must keep its own message.
+    expect(isUnfillable({ cause: { data: "0xfb8f41b2" } })).toBe(false);
+  });
+});
