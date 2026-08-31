@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getWindow, quoteCall, DexError } from "@predictarena/dex";
-import { serverDex } from "@/lib/server";
+import { serverDex, withDeadline } from "@/lib/server";
 import { rateLimit, clientKey, tooManyRequests } from "@/lib/rateLimit";
 import type { QuoteDto } from "@/lib/types";
 
@@ -45,7 +45,9 @@ export async function GET(request: Request): Promise<NextResponse> {
     // Read this ONE window, uncached: its on-chain status gates whether an
     // order can be placed at all, and a stale answer here would send someone
     // to sign into a window that has already locked.
-    const window = await getWindow(dex, marketId as `0x${string}`);
+    const window = await withDeadline("getWindow", 12_000, () =>
+      getWindow(dex, marketId as `0x${string}`),
+    );
     if (!window) {
       return NextResponse.json(
         { code: "NO_MARKETS", message: "That window is no longer live.", action: "Pick the next window." },
@@ -59,7 +61,9 @@ export async function GET(request: Request): Promise<NextResponse> {
       );
     }
 
-    const quote = await quoteCall(dex, { window, direction, stake });
+    const quote = await withDeadline("quoteCall", 12_000, () =>
+      quoteCall(dex, { window, direction, stake }),
+    );
     if (!quote) {
       return NextResponse.json(
         {

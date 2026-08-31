@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getTopOfBook, DexError } from "@predictarena/dex";
-import { serverDex } from "@/lib/server";
+import { serverDex, withDeadline } from "@/lib/server";
 import { rateLimit, clientKey, tooManyRequests } from "@/lib/rateLimit";
 import { cached } from "@/lib/cache";
 import { windowsFor } from "@/lib/windows";
@@ -36,9 +36,9 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     // Underlying price: the real-world signal the window resolves against.
     const [live, history] = await Promise.all([
-      cached(`price:${asset}`, 2_500, () => client.fetchPrice(asset)).catch(() => null),
+      cached(`price:${asset}`, 2_500, () => withDeadline("price", 8_000, () => client.fetchPrice(asset))).catch(() => null),
       // History moves once a minute; there is no reason to refetch it every 5s.
-      cached(`hist:${asset}`, 20_000, () => client.fetchPriceHistory(asset, { limit: 90 })).catch(
+      cached(`hist:${asset}`, 20_000, () => withDeadline("hist", 10_000, () => client.fetchPriceHistory(asset, { limit: 90 }))).catch(
         () => [] as unknown[],
       ),
     ]);
@@ -54,9 +54,9 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     if (chosen) {
       const [b, t, fills] = await Promise.all([
-        cached(`book:${chosen.pool}`, 2_500, () => client.getBinaryOrderBook(chosen.pool, { depth: 8 })).catch(() => book),
+        cached(`book:${chosen.pool}`, 2_500, () => withDeadline("book", 8_000, () => client.getBinaryOrderBook(chosen.pool, { depth: 8 }))).catch(() => book),
         cached(`top:${chosen.pool}`, 2_500, () => getTopOfBook(dex, chosen.pool)).catch(() => top),
-        cached(`fills:${chosen.pool}`, 5_000, () => client.getFills(chosen.pool, { limit: 120 })).catch(() => []),
+        cached(`fills:${chosen.pool}`, 5_000, () => withDeadline("fills", 8_000, () => client.getFills(chosen.pool, { limit: 120 }))).catch(() => []),
       ]);
       book = b;
       top = t;

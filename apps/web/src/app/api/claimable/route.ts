@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { serverDex } from "@/lib/server";
+import { serverDex, withDeadline } from "@/lib/server";
 import { rateLimit, clientKey, tooManyRequests } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +27,12 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   try {
     const dex = serverDex();
-    const positions = await dex.exchange.client.getClaimable(wallet as `0x${string}`);
+    // 12s: comfortably longer than the 2.5-4s this normally takes, and far
+    // enough inside the function limit that a slow venue becomes a message
+    // rather than a 504.
+    const positions = await withDeadline("getClaimable", 12_000, () =>
+      dex.exchange.client.getClaimable(wallet as `0x${string}`),
+    );
     const total = positions.reduce((sum, p) => sum + p.estPayout, 0n);
     return NextResponse.json(
       {

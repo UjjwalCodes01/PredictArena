@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getTopOfBook, DexError } from "@predictarena/dex";
-import { serverDex } from "@/lib/server";
+import { serverDex, withDeadline } from "@/lib/server";
 import { rateLimit, clientKey, tooManyRequests } from "@/lib/rateLimit";
 import { cached } from "@/lib/cache";
 import { windowsFor } from "@/lib/windows";
@@ -44,7 +44,9 @@ export async function GET(request: Request): Promise<NextResponse> {
         let up: bigint | null = null;
         let down: bigint | null = null;
         try {
-          const top = await cached(`top:${w.pool}`, 2_500, () => getTopOfBook(dex, w.pool));
+          const top = await cached(`top:${w.pool}`, 2_500, () =>
+            withDeadline("topOfBook", 8_000, () => getTopOfBook(dex, w.pool)),
+          );
           up = top.up;
           down = top.down;
         } catch {

@@ -73,3 +73,40 @@ export async function dbRead<T>(
   }
   throw lastError;
 }
+
+/**
+ * Bound an upstream call so it cannot outlive the request.
+ *
+ * Serverless functions are killed at a hard wall time. An upstream that hangs
+ * past it takes the whole function with it, and the caller gets a bare 504 —
+ * no error code, no action, nothing the UI can switch on. Measured in
+ * production: a cold `/api/claimable` took 75 seconds, which is past the
+ * function limit on most plans.
+ *
+ * A deadline turns that into an ordinary, handled failure. The route decides
+ * what a miss means: optional data falls back to empty, essential data becomes
+ * a 503 with a code the UI already renders.
+ *
+ * Note this does not CANCEL the upstream work — these SDK calls take no signal.
+ * It stops us waiting on it, which is the part that matters for the response.
+ */
+export async function withDeadline<T>(
+  label: string,
+  ms: number,
+  work: () => Promise<T>,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`${label} exceeded ${ms}ms`)),
+          ms,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}

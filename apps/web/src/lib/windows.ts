@@ -2,6 +2,7 @@ import "server-only";
 
 import { getWindows, type DexClient, type Window } from "@predictarena/dex";
 import { cached } from "./cache";
+import { withDeadline } from "./server";
 
 /**
  * The window list, behind ONE cache key per asset.
@@ -19,12 +20,16 @@ export function windowsFor(
   opts: { asset?: string | undefined; intervalSec?: number | undefined } = {},
 ): Promise<Window[]> {
   const key = `windows:${opts.asset ?? "all"}:${opts.intervalSec ?? "all"}`;
+  // 15s. Slower than this and the page should say so rather than hang until
+  // the platform kills the function and returns a bare 504.
   return cached(key, 2_500, () =>
-    getWindows(dex, {
+    withDeadline("getWindows", 15_000, () =>
+      getWindows(dex, {
       ...(opts.asset ? { asset: opts.asset } : {}),
       ...(opts.intervalSec !== undefined ? { intervalSec: opts.intervalSec } : {}),
-      includeUntradable: true,
-      limit: 40,
-    }),
+        includeUntradable: true,
+        limit: 40,
+      }),
+    ),
   );
 }
