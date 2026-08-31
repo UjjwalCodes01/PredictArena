@@ -7,6 +7,7 @@ import { wagmiConfig } from "@/lib/wagmi";
 import { clearPending } from "@/lib/pending";
 import { releaseWalletDexClient } from "@/lib/dexClient";
 import { ErrorReporter } from "@/components/ErrorReporter";
+import { KeepFresh } from "@/components/KeepFresh";
 
 export function Providers({ children }: { children: ReactNode }) {
   // Created once per mount, not per render, so the cache is not thrown away.
@@ -30,6 +31,7 @@ export function Providers({ children }: { children: ReactNode }) {
       <QueryClientProvider client={queryClient}>
         <SessionReset />
         <ErrorReporter />
+        <KeepFresh />
         {children}
       </QueryClientProvider>
     </WagmiProvider>
