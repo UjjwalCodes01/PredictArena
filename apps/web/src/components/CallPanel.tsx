@@ -9,7 +9,7 @@
  * Nothing is hidden behind a modal and no step appears before the one before it
  * is answered, so the screen never shows more than the next choice.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAccount } from "wagmi";
 import type { Direction } from "@predictarena/dex";
 import type { WindowDto, QuoteDto } from "@/lib/types";
@@ -83,25 +83,47 @@ export function CallPanel({
     return () => { cancelled = true; };
   }, [direction, stake, w.marketId]);
 
+  /*
+   * Callbacks held in a ref, not in the dependency arrays below.
+   *
+   * These effects CALL a parent callback, and that callback sets parent state.
+   * If the callback's identity is also a dependency, the resulting re-render
+   * hands down a new identity, the effect re-runs, it calls the callback
+   * again — and the page locks solid at 100% CPU.
+   *
+   * That is not hypothetical: it shipped. The parent passed
+   * `onPlaced={() => setPlaced(n => n + 1)}`, a fresh arrow every render, so
+   * the first genuinely successful call froze the tab. It went unnoticed
+   * because a separate bug meant no call had ever reached "placed".
+   *
+   * A ref keeps the latest callback without making identity a trigger.
+   */
+  const onPlacedRef = useRef(onPlaced);
+  const onWindowClosedRef = useRef(onWindowClosed);
+  useEffect(() => {
+    onPlacedRef.current = onPlaced;
+    onWindowClosedRef.current = onWindowClosed;
+  });
+
   // A window that locked mid-decision is not an error the user can act on --
   // roll them onto the next one rather than leaving a dead panel with a
   // message in it. The plan asks for exactly this: roll, with a notice.
   useEffect(() => {
-    if (phase.kind === "error" && phase.code === "WINDOW_CLOSED") {
-      onWindowClosed();
-      const t = setTimeout(reset, 400);
-      return () => clearTimeout(t);
-    }
-  }, [phase, onWindowClosed, reset]);
+    if (phase.kind !== "error" || phase.code !== "WINDOW_CLOSED") return;
+    onWindowClosedRef.current();
+    const t = setTimeout(reset, 400);
+    return () => clearTimeout(t);
+    // `phase.code` only exists on the error branch; both are primitives, so
+    // this fires once per distinct error rather than on every render.
+  }, [phase.kind, phase.kind === "error" ? phase.code : null, reset]);
 
   // A completed call clears the form so the panel is ready for the next window.
   useEffect(() => {
-    if (phase.kind === "placed") {
-      onPlaced();
-      const t = setTimeout(() => { reset(); setDirection(null); }, 6000);
-      return () => clearTimeout(t);
-    }
-  }, [phase.kind, onPlaced, reset]);
+    if (phase.kind !== "placed") return;
+    onPlacedRef.current();
+    const t = setTimeout(() => { reset(); setDirection(null); }, 6000);
+    return () => clearTimeout(t);
+  }, [phase.kind, reset]);
 
   if (closed) {
     return (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useAccount } from "wagmi";
@@ -14,6 +14,9 @@ export default function HomePage() {
   // Bumped when a call lands so the list refetches at once rather than waiting
   // for its next poll.
   const [placed, setPlaced] = useState(0);
+  // Stable identity. An inline arrow here is a new function every render, which
+  // is what turned the child's effect into a render loop.
+  const handlePlaced = useCallback(() => setPlaced((n) => n + 1), []);
 
   return (
     <>
@@ -52,7 +55,7 @@ export default function HomePage() {
       */}
       <div className="grid gap-5 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] xl:gap-6">
         <div className="min-w-0">
-          <WindowFeed onPlaced={() => setPlaced((n) => n + 1)} />
+          <WindowFeed onPlaced={handlePlaced} />
         </div>
         <div className="min-w-0">
           <SidePanel refreshKey={placed} />
