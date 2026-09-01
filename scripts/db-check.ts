@@ -13,7 +13,7 @@ import { bold, dim, green, yellow, red, heading, report, kv, check, summarise, d
 const results: CheckResult[] = [];
 const push = (r: CheckResult): CheckResult => (results.push(r), report(r), r);
 
-const EXPECTED_TABLES = ["windows", "calls", "wallets", "sync_state"];
+const EXPECTED_TABLES = ["windows", "calls", "wallets", "sync_state", "duels", "forecasts"];
 
 async function main(): Promise<void> {
   console.log(bold("\nDatabase check -- Neon Postgres"));
@@ -52,7 +52,7 @@ async function main(): Promise<void> {
   }));
 
   heading("3. Schema");
-  push(await check("All four tables exist", async () => {
+  push(await check("Every table exists", async () => {
     const rows = await sql`
       SELECT table_name FROM information_schema.tables
       WHERE table_schema = 'public'`;
