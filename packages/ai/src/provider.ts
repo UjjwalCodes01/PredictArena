@@ -71,7 +71,7 @@ export function modelId(): string {
  * So a service-account key may be supplied inline as JSON. Returning undefined
  * falls through to ADC, which is the right behaviour locally.
  */
-function serviceAccountAuth(): GoogleAuth | undefined {
+export function serviceAccountAuth(): GoogleAuth | undefined {
   const raw = process.env["GOOGLE_SERVICE_ACCOUNT_JSON"];
   if (!raw || raw.trim() === "") return undefined;
 
@@ -105,18 +105,39 @@ function serviceAccountAuth(): GoogleAuth | undefined {
  * Build the client for whichever provider is configured.
  *
  * Returns null when none is. Throws only when a provider is configured but
- * configured WRONGLY — a bad service-account blob is a deployment mistake worth
- * surfacing loudly, unlike a missing key, which is a legitimate state.
+ * configured WRONGLY — bad credentials are a deployment mistake worth surfacing,
+ * unlike a missing key, which is a legitimate state.
+ *
+ * **Async on purpose, and it matters.** `new AnthropicVertex(...)` resolves its
+ * auth client in the CONSTRUCTOR and keeps the promise privately. Left alone,
+ * a credential failure becomes an *unhandled rejection* — the constructor
+ * returns a healthy-looking client, and the process dies later from a promise
+ * nobody can reach. Awaiting the credential here turns that into an ordinary
+ * error the caller already handles, and the forecaster simply reports offline.
+ *
+ * With a service-account key this resolves locally, no network.
  */
-export function createForecastClient(opts: {
+export async function createForecastClient(opts: {
   timeoutMs: number;
   maxRetries: number;
-}): { client: ForecastClient; provider: Provider } | null {
+}): Promise<{ client: ForecastClient; provider: Provider } | null> {
   const provider = activeProvider();
   if (provider === null) return null;
 
   if (provider === "vertex") {
-    const auth = serviceAccountAuth();
+    const auth = serviceAccountAuth() ?? new GoogleAuth({ scopes: CLOUD_PLATFORM_SCOPE });
+
+    let authClient: Awaited<ReturnType<GoogleAuth["getClient"]>>;
+    try {
+      authClient = await auth.getClient();
+    } catch (e) {
+      throw new Error(
+        "Could not load Google credentials for Vertex AI. Locally, run " +
+          "`gcloud auth application-default login`; on a serverless host, set " +
+          `GOOGLE_SERVICE_ACCOUNT_JSON. (${e instanceof Error ? e.message : "unknown"})`,
+      );
+    }
+
     const client = new AnthropicVertex({
       // Both read their own env vars when omitted, but passing them explicitly
       // keeps the failure legible: a missing region here is a clear message
@@ -125,7 +146,8 @@ export function createForecastClient(opts: {
       region: process.env["CLOUD_ML_REGION"] ?? "global",
       timeout: opts.timeoutMs,
       maxRetries: opts.maxRetries,
-      ...(auth ? { googleAuth: auth } : {}),
+      // Pre-resolved, so the client holds no promise that can reject unobserved.
+      authClient,
     });
     return { client, provider };
   }

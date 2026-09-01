@@ -4,9 +4,16 @@
  * The credential path is the one piece of this that only fails in production:
  * locally it is covered by ADC, so a broken GOOGLE_SERVICE_ACCOUNT_JSON is
  * invisible until it is deployed. These tests are what stands in for that.
+ *
+ * **Nothing here may construct a client that falls back to Application Default
+ * Credentials.** Doing so reaches for the GCE metadata server, which resolves
+ * differently on a developer laptop and a CI runner — and, before the client
+ * awaited its credentials, left an unhandled rejection that passed locally and
+ * killed the CI worker. Every construction below supplies an explicit
+ * service-account key, which resolves locally with no network at all.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { activeProvider, createForecastClient, describeProvider, modelId } from "../provider";
+import { activeProvider, createForecastClient, describeProvider, modelId, serviceAccountAuth } from "../provider";
 
 const KEYS = [
   "ANTHROPIC_VERTEX_PROJECT_ID",
@@ -79,53 +86,97 @@ describe("modelId", () => {
 });
 
 describe("createForecastClient", () => {
-  it("returns null with nothing configured", () => {
-    expect(createForecastClient(opts)).toBeNull();
+  it("returns null with nothing configured", async () => {
+    expect(await createForecastClient(opts)).toBeNull();
   });
 
-  it("builds a first-party client from a key", () => {
+  it("builds a first-party client from a key", async () => {
     process.env["ANTHROPIC_API_KEY"] = "sk-ant-test";
-    const made = createForecastClient(opts);
+    const made = await createForecastClient(opts);
     expect(made?.provider).toBe("anthropic");
     expect(made?.client.messages).toBeDefined();
   });
 
-  it("builds a Vertex client from a project, defaulting the region to global", () => {
+  it("builds a Vertex client from a project, defaulting the region to global", async () => {
     process.env["ANTHROPIC_VERTEX_PROJECT_ID"] = "demo";
-    const made = createForecastClient(opts);
+    process.env["GOOGLE_SERVICE_ACCOUNT_JSON"] = FAKE_SA;
+    const made = await createForecastClient(opts);
     expect(made?.provider).toBe("vertex");
     expect(made?.client.messages).toBeDefined();
   });
 
-  it("accepts an inline service-account key", () => {
+  it("accepts an inline service-account key", async () => {
     process.env["ANTHROPIC_VERTEX_PROJECT_ID"] = "demo";
     process.env["GOOGLE_SERVICE_ACCOUNT_JSON"] = FAKE_SA;
-    expect(createForecastClient(opts)?.provider).toBe("vertex");
+    expect((await createForecastClient(opts))?.provider).toBe("vertex");
   });
 
-  it("accepts that key base64-encoded, since dashboards mangle embedded newlines", () => {
+  it("accepts that key base64-encoded, since dashboards mangle embedded newlines", async () => {
     process.env["ANTHROPIC_VERTEX_PROJECT_ID"] = "demo";
     process.env["GOOGLE_SERVICE_ACCOUNT_JSON"] = Buffer.from(FAKE_SA).toString("base64");
-    expect(createForecastClient(opts)?.provider).toBe("vertex");
+    expect((await createForecastClient(opts))?.provider).toBe("vertex");
   });
 
-  it("ignores an empty credential blob and falls through to ADC", () => {
+  it("awaits its credentials, so none can reject unobserved", async () => {
+    // The regression this guards. `new AnthropicVertex(...)` resolves auth in
+    // its CONSTRUCTOR and keeps the promise privately; left alone, a credential
+    // failure became an unhandled rejection that passed locally and killed the
+    // CI worker. Awaiting it is the fix, so the contract is that this function
+    // is async and settles.
+    //
+    // Asserted with a service-account key rather than ADC on purpose: probing
+    // the metadata server is slow, and resolves differently on a laptop, a CI
+    // runner and a GCE box — which is the flakiness being removed, not a thing
+    // to reintroduce as a test.
     process.env["ANTHROPIC_VERTEX_PROJECT_ID"] = "demo";
+    process.env["GOOGLE_SERVICE_ACCOUNT_JSON"] = FAKE_SA;
+
+    const unhandled: unknown[] = [];
+    const onUnhandled = (e: unknown): void => { unhandled.push(e); };
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      const pending = createForecastClient(opts);
+      expect(pending).toBeInstanceOf(Promise);
+      expect((await pending)?.provider).toBe("vertex");
+      await new Promise((r) => setTimeout(r, 50));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+});
+
+describe("serviceAccountAuth", () => {
+  // Tested directly rather than through a client: this is pure parsing, and
+  // building a client to reach it would drag in credential resolution.
+  it("returns nothing when unset, so the caller falls through to ADC", () => {
+    expect(serviceAccountAuth()).toBeUndefined();
+  });
+
+  it("ignores an empty or whitespace blob", () => {
     process.env["GOOGLE_SERVICE_ACCOUNT_JSON"] = "   ";
-    expect(createForecastClient(opts)?.provider).toBe("vertex");
+    expect(serviceAccountAuth()).toBeUndefined();
   });
 
-  it("throws a legible error on an unparseable credential blob", () => {
-    process.env["ANTHROPIC_VERTEX_PROJECT_ID"] = "demo";
+  it("accepts raw JSON", () => {
+    process.env["GOOGLE_SERVICE_ACCOUNT_JSON"] = FAKE_SA;
+    expect(serviceAccountAuth()).toBeDefined();
+  });
+
+  it("accepts base64, since dashboards mangle the newlines in private_key", () => {
+    process.env["GOOGLE_SERVICE_ACCOUNT_JSON"] = Buffer.from(FAKE_SA).toString("base64");
+    expect(serviceAccountAuth()).toBeDefined();
+  });
+
+  it("throws a legible error on an unparseable blob", () => {
     process.env["GOOGLE_SERVICE_ACCOUNT_JSON"] = "{not json";
-    expect(() => createForecastClient(opts)).toThrow(/not valid JSON/);
+    expect(() => serviceAccountAuth()).toThrow(/not valid JSON/);
   });
 
   it("rejects a blob that parses but is not a service-account key", () => {
     // The likely mistake: pasting an OAuth client or an API key instead.
-    process.env["ANTHROPIC_VERTEX_PROJECT_ID"] = "demo";
     process.env["GOOGLE_SERVICE_ACCOUNT_JSON"] = JSON.stringify({ type: "authorized_user" });
-    expect(() => createForecastClient(opts)).toThrow(/client_email/);
+    expect(() => serviceAccountAuth()).toThrow(/client_email/);
   });
 });
 

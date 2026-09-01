@@ -45,10 +45,10 @@ export function isConfigured(): boolean {
   return activeProvider() !== null;
 }
 
-function getClient(): { client: ForecastClient; provider: Provider } | null {
+async function getClient(): Promise<{ client: ForecastClient; provider: Provider } | null> {
   if (cached) return cached;
   try {
-    cached = createForecastClient({ timeoutMs: TIMEOUT_MS, maxRetries: 1 });
+    cached = await createForecastClient({ timeoutMs: TIMEOUT_MS, maxRetries: 1 });
   } catch (e) {
     // A misconfigured provider is a deployment mistake, not a transient fault.
     // Say so once; the forecaster then behaves exactly as if it were offline.
@@ -74,7 +74,7 @@ export interface ForecastResult {
  * the site works without it, and the agent's default action is to do nothing.
  */
 export async function forecastWindow(ctx: WindowContext): Promise<ForecastResult | null> {
-  const active = getClient();
+  const active = await getClient();
   if (!active) return null;
 
   try {
