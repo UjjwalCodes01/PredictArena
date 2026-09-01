@@ -317,5 +317,6 @@ credible.
 | [docs/cut-list.md](docs/cut-list.md) | What we deliberately did not build, and why |
 | [docs/phase4-hardening.md](docs/phase4-hardening.md) | Resilience drills and security sweep |
 | [docs/demo-video.md](docs/demo-video.md) | Shot script for the demo |
+| [docs/deck.html](docs/deck.html) | Six-slide pitch deck (open in a browser) |
 
 Built for the Somnia / DreamDEX hackathon, September 2026.

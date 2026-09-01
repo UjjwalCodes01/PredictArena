@@ -1,0 +1,499 @@
+<title>Prediction Leagues</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/*
+ * Palette inherited from the product's own tokens (apps/web/src/app/globals.css).
+ * The site commits to a single dark instrument-panel look on purpose — a panel
+ * that turns white in daylight is a different product — so this deck does too,
+ * and paints every colour explicitly rather than borrowing the host ground.
+ */
+:root{
+  --bg:oklch(14% 0.004 260);
+  --surface:oklch(18% 0.005 260);
+  --surface-2:oklch(21% 0.006 260);
+  --border:oklch(26% 0.007 260);
+  --border-strong:oklch(34% 0.009 260);
+  --ink:oklch(96% 0.002 260);
+  --ink-soft:oklch(70% 0.008 260);
+  --ink-faint:oklch(62% 0.008 260);
+  --accent:oklch(56% 0.23 25);
+  --accent-text:oklch(74% 0.16 25);
+  --accent-soft:oklch(26% 0.09 25);
+  --up:oklch(64.5% 0.19 168);
+  --down:oklch(55% 0.21 25);
+
+  --display:"IBM Plex Sans Condensed",ui-sans-serif,system-ui,sans-serif;
+  --body:"IBM Plex Sans",ui-sans-serif,system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+}
+
+*{box-sizing:border-box}
+
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:var(--body);
+  margin:0;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* Faint housing grid, same device the product uses on its panels. */
+.deck{
+  height:100dvh;
+  overflow-y:auto;
+  scroll-snap-type:y mandatory;
+  scroll-behavior:smooth;
+  background-image:
+    linear-gradient(to right,oklch(100% 0 0/0.022) 1px,transparent 1px),
+    linear-gradient(to bottom,oklch(100% 0 0/0.022) 1px,transparent 1px);
+  background-size:32px 32px;
+}
+
+.slide{
+  min-height:100dvh;
+  scroll-snap-align:start;
+  scroll-snap-stop:always;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  padding:clamp(2rem,5vw,4.5rem) clamp(1.25rem,5vw,5rem) clamp(3.5rem,6vw,5rem);
+  position:relative;
+  border-bottom:1px solid var(--border);
+}
+
+/* ── instrument rail ─────────────────────────────────────────────── */
+.rail{
+  position:absolute;
+  top:clamp(1.25rem,3vw,2.25rem);
+  left:clamp(1.25rem,5vw,5rem);
+  right:clamp(1.25rem,5vw,5rem);
+  display:flex;
+  align-items:center;
+  gap:.9rem;
+  font-family:var(--mono);
+  font-size:.625rem;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--ink-faint);
+}
+.rail .idx{color:var(--accent-text);font-weight:600}
+.rail .line{flex:1;height:1px;background:var(--border)}
+
+.wrap{width:100%;max-width:1080px;margin:0 auto}
+
+/* ── type scale ──────────────────────────────────────────────────── */
+h1,h2{
+  font-family:var(--display);
+  font-weight:700;
+  line-height:1.02;
+  letter-spacing:-.02em;
+  text-wrap:balance;
+  margin:0;
+}
+h1{font-size:clamp(2.6rem,7.5vw,5.5rem)}
+h2{font-size:clamp(2rem,4.6vw,3.4rem)}
+
+.lede{
+  font-size:clamp(1.05rem,1.9vw,1.4rem);
+  line-height:1.5;
+  color:var(--ink-soft);
+  max-width:62ch;
+  text-wrap:pretty;
+}
+p{line-height:1.6;text-wrap:pretty}
+
+.label{
+  font-family:var(--mono);
+  font-size:.625rem;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--ink-faint);
+}
+.accent{color:var(--accent-text)}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+/* ── components ──────────────────────────────────────────────────── */
+.panel{
+  border:1px solid var(--border);
+  background:var(--surface);
+  border-radius:3px;
+}
+.panel-h{
+  display:flex;align-items:center;justify-content:space-between;gap:1rem;
+  padding:.6rem .9rem;border-bottom:1px solid var(--border);
+}
+.panel-b{padding:1rem .9rem}
+
+.grid{display:grid;gap:1px;background:var(--border)}
+.grid > *{background:var(--surface);padding:1.1rem 1rem}
+
+.stat .n{
+  font-family:var(--mono);
+  font-variant-numeric:tabular-nums;
+  font-size:clamp(1.5rem,3.2vw,2.3rem);
+  font-weight:600;
+  line-height:1;
+  display:block;
+}
+.stat .k{margin-top:.45rem;display:block}
+
+.rows{display:flex;flex-direction:column;gap:1px;background:var(--border);border:1px solid var(--border)}
+.row{
+  background:var(--surface);
+  display:grid;
+  grid-template-columns:auto 1fr;
+  gap:.35rem 1.1rem;
+  padding:.85rem 1rem;
+  align-items:baseline;
+}
+.row .t{font-weight:600;font-size:1rem}
+.row .d{color:var(--ink-soft);font-size:.9rem;line-height:1.5;grid-column:2}
+.row .m{font-family:var(--mono);font-size:.7rem;color:var(--accent-text);letter-spacing:.04em}
+
+.tag{
+  display:inline-block;font-family:var(--mono);font-size:.625rem;
+  letter-spacing:.1em;text-transform:uppercase;
+  padding:.22rem .5rem;border-radius:2px;
+  background:var(--surface-2);color:var(--ink-soft);
+}
+.tag.on{background:var(--accent-soft);color:var(--accent-text)}
+.tag.up{background:oklch(24% 0.06 168);color:var(--up)}
+
+/* The thesis figure: a scale with the coin-flip line marked. */
+.scale{margin-top:.5rem}
+.scale-bar{
+  position:relative;height:8px;border-radius:2px;
+  background:linear-gradient(90deg,var(--up) 0%,var(--surface-2) 52%,var(--down) 100%);
+  opacity:.8;
+}
+.tick{position:absolute;top:-7px;bottom:-7px;width:2px;background:var(--ink)}
+.scale-k{display:flex;justify-content:space-between;margin-top:.55rem}
+
+a{color:var(--accent-text)}
+a:hover{color:var(--ink)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
+::selection{background:var(--accent-soft);color:var(--ink)}
+
+/* ── progress ────────────────────────────────────────────────────── */
+.prog{
+  position:fixed;left:0;top:0;height:2px;background:var(--accent);
+  width:0;z-index:20;transition:width .18s ease-out;
+}
+.nav{
+  position:fixed;right:clamp(.75rem,2vw,1.5rem);top:50%;transform:translateY(-50%);
+  display:flex;flex-direction:column;gap:.55rem;z-index:20;
+}
+.nav a{
+  width:7px;height:7px;border-radius:50%;background:var(--border-strong);
+  display:block;transition:background .15s,transform .15s;
+}
+.nav a[aria-current="true"]{background:var(--accent);transform:scale(1.35)}
+.hint{
+  position:fixed;left:50%;transform:translateX(-50%);bottom:1.1rem;z-index:20;
+  transition:opacity .4s;
+}
+
+@media (max-width:640px){
+  .nav{display:none}
+  .row{grid-template-columns:1fr}
+  .row .d{grid-column:1}
+}
+@media (prefers-reduced-motion:reduce){
+  .deck{scroll-behavior:auto}
+  *,*::before,*::after{transition-duration:.01ms!important;animation-duration:.01ms!important}
+}
+</style>
+
+<div class="prog" id="prog"></div>
+<nav class="nav" id="nav" aria-label="Slides"></nav>
+
+<div class="deck" id="deck">
+
+  <!-- 1 ── thesis ─────────────────────────────────────────────── -->
+  <section class="slide" id="s1">
+    <div class="rail"><span class="idx">01</span><span>The problem</span><span class="line"></span><span>Prediction Leagues</span></div>
+    <div class="wrap">
+      <p class="label" style="margin:0 0 1.1rem">Somnia Shannon testnet · DreamDEX Event Contracts</p>
+      <h1>Your P&amp;L cannot<br>tell skill from luck.</h1>
+      <p class="lede" style="margin:1.5rem 0 0">
+        Every prediction market shows you a number that went up or down. Over a weekend
+        of five-minute windows, that number is mostly noise — and no venue will tell you
+        which part was you.
+      </p>
+
+      <div class="panel" style="margin-top:2.6rem;max-width:560px">
+        <div class="panel-h">
+          <span class="label">Brier score — forecast accuracy</span>
+          <span class="label">lower is better</span>
+        </div>
+        <div class="panel-b">
+          <div class="scale">
+            <div class="scale-bar"><span class="tick" style="left:52%"></span></div>
+            <div class="scale-k">
+              <span class="label" style="color:var(--up)">0.000 · perfect</span>
+              <span class="label" style="color:var(--ink)">0.250 · a coin flip</span>
+            </div>
+          </div>
+          <p style="margin:1.1rem 0 0;font-size:.92rem;color:var(--ink-soft)">
+            Everything to the right of that line is guessing. Almost nobody knows
+            which side of it they are on.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 ── product ────────────────────────────────────────────── -->
+  <section class="slide" id="s2">
+    <div class="rail"><span class="idx">02</span><span>The product</span><span class="line"></span><span>Prediction Leagues</span></div>
+    <div class="wrap">
+      <h2>A weekly league that scores<br>you like a forecaster.</h2>
+      <p class="lede" style="margin:1.3rem 0 2.2rem">
+        Call Up or Down on BTC and ETH in fixed windows. Win to build a streak and climb
+        the board. Two numbers do the real work.
+      </p>
+
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr));border:1px solid var(--border)">
+        <div>
+          <span class="tag on">Brier score</span>
+          <p style="margin:.9rem 0 0;font-size:.95rem;color:var(--ink-soft)">
+            On a binary venue the price you pay <em>is</em> your claim: buying Up at 62c
+            asserts Up is 62% likely. Brier is the mean squared error between what you
+            claimed and what happened.
+          </p>
+        </div>
+        <div>
+          <span class="tag on">Edge</span>
+          <p style="margin:.9rem 0 0;font-size:.95rem;color:var(--ink-soft)">
+            Your win rate minus the average price the market charged you. Back Up at 60c,
+            win 70% of the time, and your edge is <span class="mono" style="color:var(--up)">+10.0</span> —
+            you are finding sides the market underprices.
+          </p>
+        </div>
+      </div>
+
+      <p style="margin:1.6rem 0 0;font-size:.95rem;color:var(--ink-soft);max-width:68ch">
+        Brier alone rewards buying heavy favourites, which is confidence, not skill.
+        <strong style="color:var(--ink)">Edge is the honest one</strong>, because luck
+        averages to zero over enough calls. Both appear after five settled calls — below
+        that they are noise, and the board shows a dash rather than a number nobody
+        should trust.
+      </p>
+    </div>
+  </section>
+
+  <!-- 3 ── live proof ─────────────────────────────────────────── -->
+  <section class="slide" id="s3">
+    <div class="rail"><span class="idx">03</span><span>It is live</span><span class="line"></span><span>Prediction Leagues</span></div>
+    <div class="wrap">
+      <h2>Not a mockup. Not seeded.</h2>
+      <p class="lede" style="margin:1.3rem 0 2rem">
+        The indexer scores <strong style="color:var(--ink)">every wallet trading these
+        markets</strong>, derived from public chain fills — not just people who signed up.
+        You are ranked against traders who have no idea the league exists.
+      </p>
+
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));border:1px solid var(--border)">
+        <div class="stat"><span class="n">377</span><span class="k label">wallets ranked</span></div>
+        <div class="stat"><span class="n">6,265</span><span class="k label">calls indexed</span></div>
+        <div class="stat"><span class="n">549</span><span class="k label">windows tracked</span></div>
+        <div class="stat"><span class="n" style="color:var(--up)">4,859</span><span class="k label">settled outcomes</span></div>
+      </div>
+
+      <div class="panel" style="margin-top:1.5rem">
+        <div class="panel-h">
+          <span class="label">A real settled call</span>
+          <span class="tag up">Won</span>
+        </div>
+        <div class="panel-b mono" style="font-size:.78rem;line-height:1.9;overflow-x:auto">
+          <div><span style="color:var(--ink-faint)">tx&nbsp;&nbsp;&nbsp;&nbsp;</span> 0xc48d49413de7ea0bde898c7bd5586c2885db52f133a2274a848fdc0e32f3fff8</div>
+          <div><span style="color:var(--ink-faint)">side&nbsp;&nbsp;</span> UP &nbsp;→&nbsp; <span style="color:var(--up)">WON</span></div>
+          <div><span style="color:var(--ink-faint)">stake&nbsp;</span> 75.700000 tUSDC &nbsp;→&nbsp; 100.000000 contracts &nbsp;<span style="color:var(--ink-faint)">(implied 75.7%)</span></div>
+        </div>
+      </div>
+
+      <p style="margin:1.4rem 0 0;font-size:.95rem">
+        <a href="https://predictarena-gamma.vercel.app">predictarena-gamma.vercel.app</a>
+        <span style="color:var(--ink-faint)"> — open it now; the board is live.</span>
+      </p>
+    </div>
+  </section>
+
+  <!-- 4 ── integration ────────────────────────────────────────── -->
+  <section class="slide" id="s4">
+    <div class="rail"><span class="idx">04</span><span>Event Contracts</span><span class="line"></span><span>Prediction Leagues</span></div>
+    <div class="wrap">
+      <h2>How we use DreamDEX<br>Event Contracts.</h2>
+      <p class="lede" style="margin:1.2rem 0 2rem">
+        Fourteen SDK calls behind one module. <span class="mono" style="font-size:.85em">packages/dex</span>
+        is the only seam to the venue — the UI and the indexer never reach the network directly.
+      </p>
+
+      <div class="rows">
+        <div class="row">
+          <span class="t">Discover</span>
+          <span class="m">listBinaryVenueIds · listBinaryAssets · listLiveBinaryMarkets · getMarketOnchain</span>
+          <span class="d">Venues and contract addresses are resolved at runtime, never hard-coded — ids move. Tradability is a <em>chain</em> read, so it is a fact rather than an indexer guess.</span>
+        </div>
+        <div class="row">
+          <span class="t">Price</span>
+          <span class="m">getBinaryOrderBook · getBinaryBookParams</span>
+          <span class="d">Every price is quantized to the venue's own tick and lot grids. All amounts are <span class="mono">bigint</span> end to end — a lint rule fails CI if a float appears near money.</span>
+        </div>
+        <div class="row">
+          <span class="t">Place</span>
+          <span class="m">buildPlaceOrder · placeOrder · createTrader · faucet</span>
+          <span class="d">The browser signs; we hold no key. IOC by default, so a thin book cancels instead of failing hard — liquidity gaps at window rolls are measured reality here.</span>
+        </div>
+        <div class="row">
+          <span class="t">Settle</span>
+          <span class="m">getOutcomeBalance · getClaimable · redeem</span>
+          <span class="d">Winnings are claimed, not received, so the UI says so. Status is an enum — <span class="mono">PENDING·WON·LOST·VOID·FAILED</span> — because a void is an outcome, not an error.</span>
+        </div>
+      </div>
+
+      <p style="margin:1.5rem 0 0;font-size:.92rem;color:var(--ink-soft);max-width:70ch">
+        <span class="label accent">Two we got wrong first</span><br style="margin-bottom:.3rem">
+        Approvals must cover <em>quantity</em>, not escrow — a binary contract settles at up
+        to 1.0 collateral. And <span class="mono">ImmediateOrCancelNoFill</span> arrives as a
+        bare selector, not a message. Both are now pinned by tests, and both are written up
+        for the DreamDEX team.
+      </p>
+    </div>
+  </section>
+
+  <!-- 5 ── AI ─────────────────────────────────────────────────── -->
+  <section class="slide" id="s5">
+    <div class="rail"><span class="idx">05</span><span>The AI player</span><span class="line"></span><span>Prediction Leagues</span></div>
+    <div class="wrap">
+      <h2>An AI that plays —<br>and can lose in public.</h2>
+      <p class="lede" style="margin:1.3rem 0 2rem">
+        Every AI in this space <em>advises</em> you, and an assistant's track record is
+        whatever its author claims. Ours holds its own wallet, places real orders through
+        the same code path as the button you press, and is ranked on the same board by the
+        same Brier and edge.
+      </p>
+
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr));border:1px solid var(--border)">
+        <div>
+          <span class="label accent">It passes, mostly</span>
+          <p style="margin:.7rem 0 0;font-size:.94rem;color:var(--ink-soft)">
+            It trades only when its estimate beats the book by a margin that widens when
+            its own confidence is low. A forecaster that bets every window is a coin flip
+            with a rationale attached.
+          </p>
+        </div>
+        <div>
+          <span class="label accent">It shows its working</span>
+          <p style="margin:.7rem 0 0;font-size:.94rem;color:var(--ink-soft)">
+            Every estimate is recorded <em>before</em> the window closes, with the prices
+            the market was showing at that moment, and never revised.
+          </p>
+        </div>
+        <div>
+          <span class="label accent">It cannot flatter itself</span>
+          <p style="margin:.7rem 0 0;font-size:.94rem;color:var(--ink-soft)">
+            Whether it won is read from the chain by the same function that scores every
+            human. No branch anywhere could report otherwise.
+          </p>
+        </div>
+      </div>
+
+      <p style="margin:1.6rem 0 0;font-size:.95rem;color:var(--ink-soft);max-width:70ch">
+        Runs on <strong style="color:var(--ink)">Google Cloud Vertex AI</strong> or the
+        Claude API. Short-horizon crypto direction is close to a coin flip and the model is
+        told so — the claim is not that it wins. The claim is that it is measured, publicly,
+        by the same yardstick as everyone else.
+      </p>
+    </div>
+  </section>
+
+  <!-- 6 ── roadmap ────────────────────────────────────────────── -->
+  <section class="slide" id="s6">
+    <div class="rail"><span class="idx">06</span><span>What's next</span><span class="line"></span><span>Prediction Leagues</span></div>
+    <div class="wrap">
+      <h2>The leaderboard already knows<br>who is worth following.</h2>
+      <p class="lede" style="margin:1.3rem 0 2.2rem">
+        Copy-trading fails because it follows a P&amp;L, and a P&amp;L is mostly luck.
+        We built the measurement first. The mechanism that acts on it is next.
+      </p>
+
+      <div class="rows">
+        <div class="row">
+          <span class="t">Copy-trading via session keys</span>
+          <span class="m">next</span>
+          <span class="d">Follow a forecaster with a proven Brier score — not a proven P&amp;L — and mirror their calls under a scoped, revocable key. Custody never moves.</span>
+        </div>
+        <div class="row">
+          <span class="t">A permanent indexer host</span>
+          <span class="m">known gap</span>
+          <span class="d">Ingestion is traffic-driven today: a page view refreshes the projection when it has gone stale. Honest, and documented, but it deserves a daemon.</span>
+        </div>
+        <div class="row">
+          <span class="t">Seasons and divisions</span>
+          <span class="m">later</span>
+          <span class="d">Promotion and relegation across weeks, so a good week compounds into standing rather than resetting every Monday.</span>
+        </div>
+      </div>
+
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));border:1px solid var(--border);margin-top:1.5rem">
+        <div class="stat"><span class="n">17,328</span><span class="k label">lines, 5 packages</span></div>
+        <div class="stat"><span class="n">354</span><span class="k label">tests passing</span></div>
+        <div class="stat"><span class="n">50312</span><span class="k label">chain — testnet only</span></div>
+      </div>
+
+      <p style="margin:2rem 0 0;font-size:1.05rem">
+        <a href="https://predictarena-gamma.vercel.app" style="font-family:var(--display);font-size:1.6rem;font-weight:700;text-decoration:none">predictarena-gamma.vercel.app</a>
+      </p>
+    </div>
+  </section>
+</div>
+
+<span class="label hint" id="hint">↓ scroll · ← → keys</span>
+
+<script>
+(function(){
+  var deck = document.getElementById("deck");
+  var slides = Array.prototype.slice.call(deck.querySelectorAll(".slide"));
+  var prog = document.getElementById("prog");
+  var nav = document.getElementById("nav");
+  var hint = document.getElementById("hint");
+
+  slides.forEach(function(s, i){
+    var a = document.createElement("a");
+    a.href = "#" + s.id;
+    a.setAttribute("aria-label", "Slide " + (i + 1));
+    nav.appendChild(a);
+  });
+  var dots = Array.prototype.slice.call(nav.children);
+
+  var current = 0;
+  function sync(){
+    var pos = deck.scrollTop;
+    var i = Math.round(pos / deck.clientHeight);
+    current = Math.max(0, Math.min(slides.length - 1, i));
+    dots.forEach(function(d, n){ d.setAttribute("aria-current", n === current ? "true" : "false"); });
+    var max = deck.scrollHeight - deck.clientHeight;
+    prog.style.width = (max > 0 ? (pos / max) * 100 : 0) + "%";
+    hint.style.opacity = pos > 40 ? "0" : "1";
+  }
+  deck.addEventListener("scroll", sync, { passive: true });
+  sync();
+
+  function go(n){
+    var t = Math.max(0, Math.min(slides.length - 1, n));
+    slides[t].scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  document.addEventListener("keydown", function(e){
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === "ArrowRight" || e.key === "ArrowDown" || e.key === "PageDown" || e.key === " ") {
+      e.preventDefault(); go(current + 1);
+    } else if (e.key === "ArrowLeft" || e.key === "ArrowUp" || e.key === "PageUp") {
+      e.preventDefault(); go(current - 1);
+    } else if (e.key === "Home") { e.preventDefault(); go(0); }
+    else if (e.key === "End") { e.preventDefault(); go(slides.length - 1); }
+  });
+})();
+</script>
