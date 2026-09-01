@@ -158,3 +158,52 @@ export async function forecastWindow(ctx: WindowContext): Promise<ForecastResult
     return null;
   }
 }
+
+/**
+ * A minimal call, to prove the provider is actually usable.
+ *
+ * Exists because the alternative is discovering a misconfiguration only after
+ * a full venue scan — measured at over three minutes — for something the API
+ * answers in under a second. Returns null on success, or a human sentence
+ * naming the fix.
+ *
+ * Deliberately not used by the agent: it spends tokens to learn something the
+ * real call would tell it anyway. This is for `pnpm ai:probe`, where a person
+ * is waiting and wants the actual reason.
+ */
+export async function pingProvider(): Promise<string | null> {
+  const active = getClient();
+  if (!active) return "No provider is configured.";
+
+  try {
+    await active.client.models.generateContent({
+      model: modelId(),
+      contents: "Reply with the single word: ok",
+      config: { maxOutputTokens: 5, abortSignal: AbortSignal.timeout(20_000) },
+    });
+    return null;
+  } catch (e) {
+    if (e instanceof ApiError) {
+      // Google's own message for a disabled API names the console URL, and is
+      // more useful than anything paraphrased here.
+      const detail = e.message.replace(/\s+/g, " ").slice(0, 300);
+      if (e.status === 403) {
+        return `Vertex refused the request (403). ${detail}`;
+      }
+      if (e.status === 401) {
+        return `Credentials rejected (401). Check the key and that the service account still exists. ${detail}`;
+      }
+      if (e.status === 404) {
+        return (
+          `${modelId()} was not found (404). Check AI_MODEL, and try a specific ` +
+          `GOOGLE_CLOUD_LOCATION such as us-central1 instead of global.`
+        );
+      }
+      return `API error ${e.status}. ${detail}`;
+    }
+    if (e instanceof Error && e.name === "TimeoutError") {
+      return "The provider did not answer within 20s.";
+    }
+    return e instanceof Error ? e.message : "The provider could not be reached.";
+  }
+}

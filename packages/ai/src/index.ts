@@ -15,7 +15,7 @@
  *   `agent.ts`   the pass over the live board
  */
 export { decide, bpsToUnits, unitsToBps, edgeRequirementX10, MIN_EDGE_BPS, MIN_ASK_BPS, MAX_ASK_BPS } from "./decide";
-export { forecastWindow, isConfigured, type ForecastResult } from "./forecast";
+export { forecastWindow, isConfigured, pingProvider, type ForecastResult } from "./forecast";
 export {
   activeProvider, createForecastClient, describeProvider, modelId, serviceAccountCredentials,
   type Provider, type ForecastClient,

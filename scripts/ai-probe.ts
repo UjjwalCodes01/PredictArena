@@ -20,7 +20,7 @@ import {
 } from "@predictarena/dex";
 import {
   forecastWindow, isConfigured, decide, buildPrompt, unitsToBps, MIN_EDGE_BPS,
-  activeProvider, describeProvider, modelId,
+  activeProvider, describeProvider, modelId, createForecastClient, pingProvider,
   type WindowContext,
 } from "@predictarena/ai";
 import { createClientOrExit } from "./lib/env.js";
@@ -56,12 +56,49 @@ async function main(): Promise<void> {
 
   kv("Provider", bold(describeProvider(provider)));
   kv("Model", modelId());
-  if (provider === "vertex" && !process.env["GOOGLE_SERVICE_ACCOUNT_JSON"]) {
-    // The commonest local failure by a mile, and the error it produces
-    // otherwise ("Could not load the default credentials") explains nothing.
-    info(dim("Using Application Default Credentials. If this fails, run:"));
-    info(dim("  gcloud auth application-default login"));
+
+  // Check the credential BEFORE spending twenty seconds on chain reads. A
+  // mistyped service-account blob is the likeliest first-run failure, and
+  // finding out after the venue scan wastes the run and buries the cause.
+  try {
+    createForecastClient();
+  } catch (e) {
+    console.error(red(`  ${e instanceof Error ? e.message : "credentials are unusable"}`));
+    process.exit(1);
   }
+
+  if (provider === "vertex") {
+    kv(
+      "Credential",
+      process.env["GOOGLE_SERVICE_ACCOUNT_JSON"]
+        ? "service account (GOOGLE_SERVICE_ACCOUNT_JSON)"
+        : "Application Default Credentials",
+    );
+    if (!process.env["GOOGLE_SERVICE_ACCOUNT_JSON"]) {
+      // The commonest local failure by a mile, and the error it produces
+      // otherwise ("Could not load the default credentials") explains nothing.
+      info(dim("No service-account key set. If this fails, either run"));
+      info(dim("  gcloud auth application-default login"));
+      info(dim("or paste a key into GOOGLE_SERVICE_ACCOUNT_JSON."));
+    }
+  }
+
+  // Prove the provider works BEFORE scanning the venue. The scan takes minutes
+  // and the provider answers in a second, so checking it second means waiting
+  // an age to be told something that was knowable immediately.
+  info("Checking the provider...");
+  const problem = await pingProvider();
+  if (problem !== null) {
+    console.error(red(`  ${problem}`));
+    if (provider === "vertex") {
+      info("Most often this is one of:");
+      info("  · the Vertex AI API is not enabled on the project");
+      info("  · the service account lacks the \"Vertex AI User\" role");
+      info(`  · ${modelId()} is not offered in ${process.env["GOOGLE_CLOUD_LOCATION"] ?? "global"}`);
+    }
+    process.exit(1);
+  }
+  console.log(green("  Provider is reachable."));
 
   const { client } = createClientOrExit();
   const decimals = client.collateral.decimals;
