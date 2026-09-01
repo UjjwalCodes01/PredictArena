@@ -8,3 +8,25 @@ packages:
 # one-line fix rather than an accepted risk.
 overrides:
   esbuild: ">=0.25.0"
+
+# ── Install scripts ─────────────────────────────────────────────────────────
+# pnpm 10 refuses to run a dependency's install scripts unless it is named
+# here, and a fresh CI install FAILS rather than warning — which is what broke
+# the Vercel build the moment `@google/genai` arrived with new transitive
+# scripts. Locally it stayed quiet because approvals are cached in
+# node_modules/.modules.yaml, which is not committed.
+#
+# Each one below was read before being classified, rather than approved to make
+# the error go away.
+onlyBuiltDependencies:
+  # Downloads and links the platform binary. Genuinely required — tsx, vitest
+  # and drizzle-kit all fail without it.
+  - esbuild
+
+ignoredBuiltDependencies:
+  # `preinstall: echo 'preinstall: no-op'`. Exactly what it says.
+  - "@google/genai"
+  # `postinstall` only prints a warning when a dependent pins protobufjs with
+  # the wrong version-scheme prefix. It builds nothing and generates nothing.
+  - protobufjs
+
