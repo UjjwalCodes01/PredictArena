@@ -18,6 +18,12 @@ overrides:
 #
 # Each one below was read before being classified, rather than approved to make
 # the error go away.
+#
+# This file is the ONLY home for these settings: pnpm 11 no longer reads the
+# "pnpm" block in package.json, and older pnpm does not read this file. The
+# first attempt at this fix put them here alone and still failed on Vercel,
+# which was resolving its own older pnpm. package.json now pins
+# packageManager, so every environment agrees on a version that reads this.
 onlyBuiltDependencies:
   # Downloads and links the platform binary. Genuinely required — tsx, vitest
   # and drizzle-kit all fail without it.

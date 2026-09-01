@@ -2,6 +2,7 @@
   "name": "predictarena",
   "private": true,
   "version": "0.1.0",
+  "packageManager": "pnpm@10.28.1",
   "description": "Prediction Leagues \u2014 a social league on DreamDEX Event Contracts (Somnia Shannon testnet)",
   "type": "module",
   "engines": {
