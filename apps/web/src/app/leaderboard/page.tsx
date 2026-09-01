@@ -13,7 +13,7 @@ import Image from "next/image";
 import { useAccount } from "wagmi";
 import type { StandingsResponse } from "@/lib/types";
 import { PlayerIdentity } from "@/components/PlayerIdentity";
-import { Card, Empty, ErrorNote, Skeleton } from "@/components/ui";
+import { Card, Empty, ErrorNote, ScrollArea, Skeleton } from "@/components/ui";
 
 async function fetchStandings(week?: string): Promise<StandingsResponse> {
   const r = await fetch(`/api/standings${week ? `?week=${week}` : ""}`, { cache: "no-store" });
@@ -165,64 +165,69 @@ export default function LeaderboardPage() {
             </span>
             <span className="label w-12 text-right">POINTS</span>
           </div>
-          <ul className="divide-y divide-border">
-            {rows.map((s) => (
-              <li
-                key={s.wallet}
-                className={`flex items-center gap-3 px-4 py-3 ${
-                  me === s.wallet.toLowerCase() ? "bg-accent-soft" : ""
-                }`}
-              >
-                <span className="tabular w-6 shrink-0 text-sm text-ink-faint">{s.rank}</span>
-                <div className="min-w-0 flex-1">
-                  <PlayerIdentity
-                    address={s.wallet}
-                    displayName={s.displayName}
-                    you={me === s.wallet.toLowerCase()}
-                    ai={s.isAi ?? false}
-                  />
-                  {/* Below md the stats read as one line under the name; from md
-                      up they become their own columns, which is what the extra
-                      width is for. */}
-                  <p className="tabular mt-1 text-xs text-ink-faint md:hidden">
-                    {s.wins}W {s.losses}L
-                    {s.voids > 0 ? ` ${s.voids}V` : ""}
-                    {s.currentStreak >= 2 ? ` · ${s.currentStreak} in a row` : ""}
-                    {s.calibration !== null ? ` · ${s.calibration}% accurate` : ""}
-                    {s.edge !== null ? ` · ${s.edge > 0 ? "+" : ""}${s.edge} edge` : ""}
-                  </p>
-                </div>
-
-                <span className="tabular hidden w-14 shrink-0 text-right text-sm text-ink-soft md:block">
-                  {s.wins}-{s.losses}
-                </span>
-                <span className="tabular hidden w-14 shrink-0 text-right text-sm text-ink-soft md:block">
-                  {s.currentStreak >= 2 ? s.currentStreak : "—"}
-                </span>
-                <span className="tabular hidden w-20 shrink-0 text-right text-sm text-ink-soft md:block">
-                  {s.calibration === null ? "—" : `${s.calibration}%`}
-                </span>
-                {/* Sign carries the meaning, so it is stated with a + or - and
-                    coloured — never colour alone. */}
-                <span
-                  className={`tabular hidden w-16 shrink-0 text-right text-sm md:block ${
-                    s.edge === null ? "text-ink-soft" : s.edge > 0 ? "text-up" : s.edge < 0 ? "text-down" : "text-ink-soft"
+          {/* Only the rows scroll. The column names stay put — with three
+              hundred players, a header that scrolls away leaves five unlabelled
+              number columns. */}
+          <ScrollArea label="Player standings" maxClass="max-h-[max(22rem,calc(100dvh-21rem))]">
+            <ul className="divide-y divide-border">
+              {rows.map((s) => (
+                <li
+                  key={s.wallet}
+                  className={`flex items-center gap-3 px-4 py-3 ${
+                    me === s.wallet.toLowerCase() ? "bg-accent-soft" : ""
                   }`}
-                  title={
-                    s.edge === null
-                      ? "Needs 5 settled calls"
-                      : `Won ${s.calibration}% while paying an average of ${s.avgImplied}%`
-                  }
                 >
-                  {s.edge === null ? "—" : `${s.edge > 0 ? "+" : ""}${s.edge}`}
-                </span>
+                  <span className="tabular w-6 shrink-0 text-sm text-ink-faint">{s.rank}</span>
+                  <div className="min-w-0 flex-1">
+                    <PlayerIdentity
+                      address={s.wallet}
+                      displayName={s.displayName}
+                      you={me === s.wallet.toLowerCase()}
+                      ai={s.isAi ?? false}
+                    />
+                    {/* Below md the stats read as one line under the name; from md
+                        up they become their own columns, which is what the extra
+                        width is for. */}
+                    <p className="tabular mt-1 text-xs text-ink-faint md:hidden">
+                      {s.wins}W {s.losses}L
+                      {s.voids > 0 ? ` ${s.voids}V` : ""}
+                      {s.currentStreak >= 2 ? ` · ${s.currentStreak} in a row` : ""}
+                      {s.calibration !== null ? ` · ${s.calibration}% accurate` : ""}
+                      {s.edge !== null ? ` · ${s.edge > 0 ? "+" : ""}${s.edge} edge` : ""}
+                    </p>
+                  </div>
 
-                <span className="tabular w-12 shrink-0 text-right text-sm font-semibold text-ink">
-                  {s.points}
-                </span>
-              </li>
-            ))}
-          </ul>
+                  <span className="tabular hidden w-14 shrink-0 text-right text-sm text-ink-soft md:block">
+                    {s.wins}-{s.losses}
+                  </span>
+                  <span className="tabular hidden w-14 shrink-0 text-right text-sm text-ink-soft md:block">
+                    {s.currentStreak >= 2 ? s.currentStreak : "—"}
+                  </span>
+                  <span className="tabular hidden w-20 shrink-0 text-right text-sm text-ink-soft md:block">
+                    {s.calibration === null ? "—" : `${s.calibration}%`}
+                  </span>
+                  {/* Sign carries the meaning, so it is stated with a + or - and
+                      coloured — never colour alone. */}
+                  <span
+                    className={`tabular hidden w-16 shrink-0 text-right text-sm md:block ${
+                      s.edge === null ? "text-ink-soft" : s.edge > 0 ? "text-up" : s.edge < 0 ? "text-down" : "text-ink-soft"
+                    }`}
+                    title={
+                      s.edge === null
+                        ? "Needs 5 settled calls"
+                        : `Won ${s.calibration}% while paying an average of ${s.avgImplied}%`
+                    }
+                  >
+                    {s.edge === null ? "—" : `${s.edge > 0 ? "+" : ""}${s.edge}`}
+                  </span>
+
+                  <span className="tabular w-12 shrink-0 text-right text-sm font-semibold text-ink">
+                    {s.points}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </ScrollArea>
         </Card>
       )}
 

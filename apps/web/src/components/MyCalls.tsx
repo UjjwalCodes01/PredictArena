@@ -14,7 +14,7 @@ import { usePending, reconcile } from "@/lib/pending";
 import { useSettlementStream } from "@/hooks/useSettlementStream";
 import type { CallDto } from "@/lib/types";
 import { amount, timeAgo } from "@/lib/format";
-import { Card, Empty, ErrorNote, Skeleton, StatusPill, LiveDot } from "./ui";
+import { Card, Empty, ErrorNote, ScrollArea, Skeleton, StatusPill, LiveDot } from "./ui";
 
 /** Older than this and the projection is behind, not merely quiet. */
 const INDEXER_STALE_SEC = 180;
@@ -54,7 +54,8 @@ export function MyCalls({ refreshKey }: { refreshKey: number }) {
 
   if (!isConnected) return null;
 
-  const hasAnything = pending.length > 0 || (data?.calls.length ?? 0) > 0;
+  const total = pending.length + (data?.calls.length ?? 0);
+  const hasAnything = total > 0;
   // A stopped indexer and an empty history look identical from here. Say which.
   const indexerStale =
     data?.indexerAgeSec != null && data.indexerAgeSec > INDEXER_STALE_SEC;
@@ -62,7 +63,11 @@ export function MyCalls({ refreshKey }: { refreshKey: number }) {
   return (
     <section aria-label="Your calls" className="mt-8 lg:mt-0">
       <div className="mb-2 flex items-center justify-between gap-3">
-        <h2 className="label">YOUR CALLS</h2>
+        <div className="flex items-baseline gap-2">
+          <h2 className="label">YOUR CALLS</h2>
+          {/* The count, because a scrolling list no longer shows its own length. */}
+          {total > 0 ? <span className="tabular text-xs text-ink-faint">{total}</span> : null}
+        </div>
         {indexerStale ? (
           <span className="label text-warn" title="The indexer has not reported in over three minutes.">
             RESULTS DELAYED
@@ -108,33 +113,40 @@ export function MyCalls({ refreshKey }: { refreshKey: number }) {
           />
         </Card>
       ) : (
-        <Card className="divide-y divide-border">
-          {pending.map((p) => (
-            <div key={p.txHash} className="flex items-center justify-between gap-3 p-4 opacity-80">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-ink">
-                  {p.asset} {p.direction === "UP" ? "Up" : "Down"}
-                </p>
-                <p className="tabular mt-0.5 text-xs text-ink-faint">
-                  {amount(p.stake, 2)} tUSDC · confirming
-                </p>
-              </div>
-              <StatusPill status="PENDING" />
+        // Capped so the page stays about one screen. Beside the call flow on a
+        // wide viewport it fills the column; on a phone it stops well short of
+        // burying everything below it.
+        <Card className="overflow-hidden">
+          <ScrollArea label="Your calls" maxClass="max-h-[26rem] lg:max-h-[max(20rem,calc(100dvh-17rem))]">
+            <div className="divide-y divide-border">
+              {pending.map((p) => (
+                <div key={p.txHash} className="flex items-center justify-between gap-3 p-4 opacity-80">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-ink">
+                      {p.asset} {p.direction === "UP" ? "Up" : "Down"}
+                    </p>
+                    <p className="tabular mt-0.5 text-xs text-ink-faint">
+                      {amount(p.stake, 2)} tUSDC · confirming
+                    </p>
+                  </div>
+                  <StatusPill status="PENDING" />
+                </div>
+              ))}
+              {(data?.calls ?? []).map((c) => (
+                <div key={c.id} className="flex items-center justify-between gap-3 p-4">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-ink">
+                      {c.asset} {c.direction === "UP" ? "Up" : "Down"}
+                    </p>
+                    <p className="tabular mt-0.5 text-xs text-ink-faint">
+                      {amount(c.stake, 2)} tUSDC · {timeAgo(c.placedAt)}
+                    </p>
+                  </div>
+                  <StatusPill status={c.status} />
+                </div>
+              ))}
             </div>
-          ))}
-          {(data?.calls ?? []).map((c) => (
-            <div key={c.id} className="flex items-center justify-between gap-3 p-4">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-ink">
-                  {c.asset} {c.direction === "UP" ? "Up" : "Down"}
-                </p>
-                <p className="tabular mt-0.5 text-xs text-ink-faint">
-                  {amount(c.stake, 2)} tUSDC · {timeAgo(c.placedAt)}
-                </p>
-              </div>
-              <StatusPill status={c.status} />
-            </div>
-          ))}
+          </ScrollArea>
         </Card>
       )}
     </section>

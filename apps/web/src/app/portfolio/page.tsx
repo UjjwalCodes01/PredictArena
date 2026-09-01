@@ -15,7 +15,7 @@ import type { CallDto, StandingsResponse } from "@/lib/types";
 import { amount, timeAgo } from "@/lib/format";
 import { PlayerIdentity } from "@/components/PlayerIdentity";
 import { FormStrip } from "@/components/FormStrip";
-import { Card, Empty, ErrorNote, Skeleton, Stat, StatusPill, Button } from "@/components/ui";
+import { Card, Empty, ErrorNote, Skeleton, Stat, StatusPill, Button, ScrollArea } from "@/components/ui";
 import { NetworkBanner } from "@/components/Wallet";
 import { ClaimPanel } from "@/components/ClaimPanel";
 
@@ -106,7 +106,13 @@ export default function PortfolioPage() {
         </Card>
       ) : null}
 
-      <h2 className="label mb-2">HISTORY</h2>
+      <div className="mb-2 flex items-baseline gap-2">
+        <h2 className="label">HISTORY</h2>
+        {/* The count, because a scrolling list no longer shows its own length. */}
+        {calls.data && calls.data.calls.length > 0 ? (
+          <span className="tabular text-xs text-ink-faint">{calls.data.calls.length}</span>
+        ) : null}
+      </div>
 
       {calls.isPending ? (
         <Card className="divide-y divide-border">
@@ -132,20 +138,26 @@ export default function PortfolioPage() {
           />
         </Card>
       ) : (
-        <Card className="divide-y divide-border">
-          {calls.data.calls.map((c) => (
-            <div key={c.id} className="flex items-center justify-between gap-3 p-4">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-ink">
-                  {c.asset} {c.direction === "UP" ? "Up" : "Down"}
-                </p>
-                <p className="tabular mt-0.5 text-xs text-ink-faint">
-                  {amount(c.stake, 2)} tUSDC · {timeAgo(c.placedAt)}
-                </p>
+        // History grows without limit — it is the whole record. Bounded so the
+        // summary above it stays reachable without a long scroll back up.
+        <Card className="overflow-hidden">
+          <ScrollArea label="Call history" maxClass="max-h-[32rem]">
+              <div className="divide-y divide-border">
+            {calls.data.calls.map((c) => (
+              <div key={c.id} className="flex items-center justify-between gap-3 p-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-ink">
+                    {c.asset} {c.direction === "UP" ? "Up" : "Down"}
+                  </p>
+                  <p className="tabular mt-0.5 text-xs text-ink-faint">
+                    {amount(c.stake, 2)} tUSDC · {timeAgo(c.placedAt)}
+                  </p>
+                </div>
+                <StatusPill status={c.status} />
               </div>
-              <StatusPill status={c.status} />
-            </div>
-          ))}
+            ))}
+              </div>
+          </ScrollArea>
         </Card>
       )}
     </>

@@ -99,6 +99,37 @@ export function Stat({
   );
 }
 
+/**
+ * A list that scrolls inside its panel instead of stretching the page.
+ *
+ * Focusable on purpose: a region that scrolls with the mouse must also scroll
+ * with the keyboard, and a plain `overflow` div is unreachable by tab, so arrow
+ * keys never reach it (WCAG 2.1.1).
+ *
+ * `label` names it for a screen reader, which otherwise announces an unlabelled
+ * region and gives no clue what is inside.
+ */
+export function ScrollArea({
+  label, maxClass, className = "", children,
+}: {
+  label: string;
+  /** Height cap. Passed in because the right bound differs per surface. */
+  maxClass: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={`scroll-area ${maxClass} ${className}`}
+      tabIndex={0}
+      role="region"
+      aria-label={label}
+    >
+      {children}
+    </div>
+  );
+}
+
 /** Loading placeholder shaped like the content that is coming. */
 export function Skeleton({ className = "" }: { className?: string }) {
   return <div className={`animate-pulse rounded-sm bg-border ${className}`} aria-hidden="true" />;
