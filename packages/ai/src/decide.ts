@@ -1,7 +1,7 @@
 /**
  * The decision rule. Pure: no I/O, no clock, no randomness, no model call.
  *
- * This is deliberately separate from the model. What Claude produces is an
+ * This is deliberately separate from the model. What the model produces is an
  * ESTIMATE; whether that estimate is worth acting on is arithmetic, and
  * arithmetic is testable. Keeping the two apart means the interesting property
  * — "it only trades when it disagrees with the market by enough" — is pinned

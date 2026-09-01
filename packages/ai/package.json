@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "The AI forecaster. Estimates a probability, compares it to the market, and places a call only when it sees an edge — then is scored by exactly the same rules as every human player.",
+  "description": "The AI forecaster. Gemini estimates a probability, compares it to the market, and places a call only when it sees an edge — then is scored by exactly the same rules as every human player.",
   "exports": {
     ".": {
       "types": "./src/index.ts",
@@ -14,8 +14,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.122.0",
-    "@anthropic-ai/vertex-sdk": "^0.19.6",
+    "@google/genai": "^2.19.0",
     "@predictarena/db": "workspace:*",
     "@predictarena/dex": "workspace:*",
     "google-auth-library": "^10.2.0"

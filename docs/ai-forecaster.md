@@ -25,8 +25,8 @@ from chain-derived calls by a function that has never heard of it.
 
 1. **Read.** Live window, the resting order book, and how the last twelve
    windows on that series actually resolved.
-2. **Estimate.** Claude Opus 5 returns a probability that the window closes Up,
-   in basis points, plus how much it trusts its own estimate.
+2. **Estimate.** Gemini returns a probability that the window closes Up, in
+   basis points, plus how much it trusts its own estimate.
 3. **Compare.** A binary contract settles at exactly 1.0 collateral, so a
    probability and a price sit on the same scale and subtract directly. The gap
    is the edge.
@@ -80,23 +80,29 @@ Three properties, each enforced by construction rather than by care:
 
 ## Providers
 
-It runs on **Google Cloud Vertex AI** or the **first-party Claude API**. The
-request body is identical on both — every feature it uses is GA on Vertex:
-
-| Feature it uses | Vertex |
-|---|---|
-| Messages | Yes |
-| Structured outputs (`json_schema`) | Yes |
-| Adaptive thinking | Yes |
-| Effort | Yes |
-
-Nothing it uses is first-party-only. The one thing that *would* have been —
-server-side refusal `fallbacks`, unsupported on Vertex — was already left out
-on its own merits (see the last section).
+It runs on **Gemini**, through either Google Cloud Vertex AI or the Gemini API
+directly. The request body is identical on both, so nothing in `forecast.ts`
+branches on the backend except the error message.
 
 `provider.ts` picks the backend from the environment. **Vertex wins when both
-are configured**: it is the more deliberate setup, and a stale
-`ANTHROPIC_API_KEY` left in an environment should not silently redirect spend.
+are configured**: it is the more deliberate setup, and a stale `GEMINI_API_KEY`
+left in an environment should not silently redirect spend.
+
+The variable names are Google's own — `GOOGLE_CLOUD_PROJECT`,
+`GOOGLE_CLOUD_LOCATION`, `GEMINI_API_KEY` — rather than names of our invention,
+because the SDK already reads exactly those.
+
+### Why Flash by default
+
+`AI_MODEL` defaults to `gemini-2.5-flash`, not a Pro model. The call runs inside
+a serverless function against a window that closes, so **a slow forecast is a
+missed forecast** — the one failure that costs more than a slightly worse
+estimate. The judgement itself is small: weigh a weak base rate against a market
+price. Set `AI_MODEL=gemini-2.5-pro` to spend the latency instead.
+
+Thinking is left **dynamic** (`thinkingBudget: -1`): the model decides how much
+to spend, which suits a judgement whose difficulty varies window to window. A
+fixed budget would overspend on the easy ones.
 
 ## Running it
 
@@ -104,8 +110,8 @@ are configured**: it is the more deliberate setup, and a stale
 
 ```bash
 # .env
-ANTHROPIC_VERTEX_PROJECT_ID=your-gcp-project
-CLOUD_ML_REGION=global          # or us-east5, europe-west1, ...
+GOOGLE_CLOUD_PROJECT=your-gcp-project
+GOOGLE_CLOUD_LOCATION=global    # or us-central1, europe-west4, ...
 AI_PRIVATE_KEY=0x...            # a burner; fund with STT + tUSDC like any player
 ```
 
@@ -116,14 +122,16 @@ gcloud auth application-default login
 pnpm ai:probe
 ```
 
-Before the first run, in the GCP console: enable the **Vertex AI API**, and
-enable the Claude model in **Model Garden** for that project *and region*.
-Model availability differs by region, which is why `AI_MODEL` is overridable.
+In the GCP console you only need to enable the **Vertex AI API**. Gemini is
+Google's own model, so unlike a third-party model it needs no Model Garden
+enablement step.
 
-### First-party Claude API
+### Gemini API directly
+
+No GCP project at all — get a key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey):
 
 ```bash
-ANTHROPIC_API_KEY=sk-ant-...    # console.anthropic.com/settings/keys
+GEMINI_API_KEY=...
 ```
 
 ### Prove it, either way
@@ -157,25 +165,14 @@ Vercel env vars, for the record:
 
 | Variable | Value |
 |---|---|
-| `ANTHROPIC_VERTEX_PROJECT_ID` | your GCP project id |
-| `CLOUD_ML_REGION` | `global`, or a specific region |
+| `GOOGLE_CLOUD_PROJECT` | your GCP project id |
+| `GOOGLE_CLOUD_LOCATION` | `global`, or a specific location |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | the key JSON, or its base64 |
 | `AI_PRIVATE_KEY` | the forecaster's burner key |
-| `AI_MODEL` | optional, if Opus 5 is not enabled for you |
+| `AI_MODEL` | optional |
 
 A malformed credential blob throws with a message naming the actual problem,
 rather than failing later as an opaque "could not load default credentials".
-
-In production it runs off ordinary traffic, like ingestion — there is nowhere
-free and reliable to host a daemon. `/api/ai/run` is poked by `KeepFresh`
-alongside `/api/tick`.
-
-Because that endpoint **spends** (API tokens and testnet collateral), its
-throttle is stricter and lives in `sync_state` rather than in a module
-variable: a serverless deployment runs many instances, and a per-instance lock
-would let it trade N times as often as intended purely because traffic was
-spread around. Floor is 150 seconds between runs, globally, with at most one
-placement per run.
 
 ## Without a provider
 
@@ -194,13 +191,11 @@ stake. This forecaster is **not** expected to print money. It is expected to be
 That is the whole idea. An AI that can lose in public is worth more than one
 that cannot be checked.
 
-## Not wired, on purpose
+## Credentials are resolved lazily — and that is checked
 
-Server-side refusal fallbacks (`betas: ["server-side-fallback-2026-07-01"]`)
-are **not** enabled. A price-direction forecast has essentially no refusal
-surface, a refusal already degrades safely to a pass, and an untested beta
-header in a demo hot path is a worse risk than the one it removes.
-
-That call turned out to be free: `fallbacks` is unsupported on Vertex AI
-anyway, so wiring it would have had to be undone. On Vertex the equivalent is
-the SDK's client-side `betaRefusalFallbackMiddleware`, if it is ever wanted.
+The previous SDK resolved auth in its *constructor* and kept the promise
+privately, so a credential failure surfaced as an unhandled rejection: it
+passed locally and killed a CI worker. This SDK defers credential resolution to
+the first request, which was verified rather than assumed, and a test pins it.
+A bad credential therefore arrives as an ordinary error from `generateContent`
+that `forecast.ts` already catches, and the forecaster simply reports offline.

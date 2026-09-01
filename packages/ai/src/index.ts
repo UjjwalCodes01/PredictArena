@@ -17,7 +17,7 @@
 export { decide, bpsToUnits, unitsToBps, edgeRequirementX10, MIN_EDGE_BPS, MIN_ASK_BPS, MAX_ASK_BPS } from "./decide";
 export { forecastWindow, isConfigured, type ForecastResult } from "./forecast";
 export {
-  activeProvider, createForecastClient, describeProvider, modelId,
+  activeProvider, createForecastClient, describeProvider, modelId, serviceAccountCredentials,
   type Provider, type ForecastClient,
 } from "./provider";
 export { buildPrompt, parseForecast, SYSTEM_PROMPT, FORECAST_SCHEMA, type WindowContext, type HistoricalWindow } from "./prompt";

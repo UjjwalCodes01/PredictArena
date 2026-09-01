@@ -187,7 +187,7 @@ export default function AiPage() {
             hint={
               data?.provider
                 ? `${data.provider} is configured, but the forecaster has no wallet — set AI_PRIVATE_KEY. Everything else on the site works exactly as it does with it running.`
-                : "No model provider is configured on this deployment — neither Vertex AI nor a Claude API key — so nothing is forecasting. Everything else on the site works exactly as it does with it running."
+                : "No model provider is configured on this deployment — neither Vertex AI nor a Gemini API key — so nothing is forecasting. Everything else on the site works exactly as it does with it running."
             }
           />
         </Card>
@@ -290,7 +290,7 @@ export default function AiPage() {
                   and how the last twelve windows on that series actually resolved.
                 </li>
                 <li>
-                  <span className="text-ink">2.</span> {data.model ?? "Claude"} estimates the
+                  <span className="text-ink">2.</span> {data.model ?? "The model"} estimates the
                   probability the window closes Up, and states how much it trusts its own estimate.
                 </li>
                 <li>

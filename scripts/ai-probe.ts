@@ -2,13 +2,13 @@
  * `pnpm ai:probe` — does the forecaster work?
  *
  * A one-shot dry run of the whole AI path against live windows: read the book,
- * build the prompt, call Claude, apply the trade rule, print what it would do.
+ * build the prompt, call Gemini, apply the trade rule, print what it would do.
  * It signs nothing and writes nothing, so it is safe to run repeatedly while
  * tuning the threshold or checking a new key.
  *
  * This is the check to run FIRST after configuring a provider — Vertex AI or
- * the first-party Claude API. `pnpm smoke` proves the venue path; this proves
- * the forecaster on top of it, and reports which backend answered.
+ * the Gemini API. `pnpm smoke` proves the venue path; this proves the
+ * forecaster on top of it, and reports which backend answered.
  *
  * Flags:
  *   --asset BTC|ETH   default BTC
@@ -49,8 +49,8 @@ async function main(): Promise<void> {
   if (!isConfigured() || provider === null) {
     console.error(red("  No model provider is configured."));
     info("Set ONE of these in .env — see the AI forecaster block in .env.example:");
-    info("  ANTHROPIC_VERTEX_PROJECT_ID  (Vertex AI, plus `gcloud auth application-default login`)");
-    info("  ANTHROPIC_API_KEY            (first-party Claude API)");
+    info("  GOOGLE_CLOUD_PROJECT  (Vertex AI — plus ADC or GOOGLE_SERVICE_ACCOUNT_JSON)");
+    info("  GEMINI_API_KEY        (Gemini API direct — https://aistudio.google.com/apikey)");
     process.exit(1);
   }
 
@@ -118,9 +118,9 @@ async function main(): Promise<void> {
       info("Look for an [ai] line above — it names the cause.");
       if (provider === "vertex") {
         info(
-          `On Vertex, the usual causes are: ${modelId()} not enabled in Model Garden for ` +
-            `this project/region, the service account missing the "Vertex AI User" role, ` +
-            `or expired ADC.`,
+          `On Vertex, the usual causes are: the Vertex AI API not enabled on this project, ` +
+            `the service account missing the "Vertex AI User" role, expired ADC, or ` +
+            `${modelId()} not offered in this location.`,
         );
       }
       continue;

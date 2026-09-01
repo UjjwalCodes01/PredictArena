@@ -248,11 +248,11 @@ Every change runs `pnpm typecheck && pnpm lint && pnpm test` (354 tests).
 | `WALLETCONNECT_PROJECT_ID` | no | Adds WalletConnect; injected wallets work without it |
 | `CRON_SECRET` | no | Guards `/api/cron/ingest` if you drive ingestion externally |
 | **AI forecaster** | | *configure one provider, or leave it off entirely* |
-| `ANTHROPIC_VERTEX_PROJECT_ID` | no | GCP project — selects **Vertex AI** |
-| `CLOUD_ML_REGION` | no | `global`, or a specific region |
+| `GOOGLE_CLOUD_PROJECT` | no | GCP project — selects **Vertex AI** |
+| `GOOGLE_CLOUD_LOCATION` | no | `global`, or a specific location |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | no | Service-account key for serverless (no ADC on Vercel) |
-| `ANTHROPIC_API_KEY` | no | Selects the first-party Claude API instead |
-| `AI_MODEL` | no | Defaults to `claude-opus-5` |
+| `GEMINI_API_KEY` | no | Selects the Gemini API directly, no GCP project needed |
+| `AI_MODEL` | no | Defaults to `gemini-2.5-flash` |
 | `AI_PRIVATE_KEY` | no | The forecaster's own wallet |
 | `AI_STAKE_TUSDC` | no | Its stake per call |
 

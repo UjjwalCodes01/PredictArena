@@ -3,37 +3,30 @@
  *
  * Kept apart from `forecast.ts` so the provider choice is a small, readable,
  * separately testable decision rather than a branch buried in the request. The
- * request itself is identical either way: after construction both clients
- * expose the same `messages.create` surface, and every feature the forecaster
- * uses — structured outputs, adaptive thinking, effort — is GA on both.
+ * request itself is identical either way: after construction both paths expose
+ * the same `models.generateContent` surface.
  *
  * Two providers, chosen from the environment:
  *
- *   Vertex AI  — Claude through Google Cloud. Selected when a GCP project is
- *                configured. Billed and rate-limited by Google.
- *   Claude API — the first-party API, selected by ANTHROPIC_API_KEY.
+ *   Vertex AI  — Gemini through Google Cloud. Selected when a GCP project is
+ *                configured. Billed and rate-limited by Google Cloud.
+ *   Gemini API — the direct Gemini Developer API, selected by GEMINI_API_KEY.
+ *                Needs no GCP project at all.
  *
- * Vertex wins when both are set: it is the more deliberate configuration, and
- * a stale key left in the environment should not silently redirect spend.
- */
-import Anthropic from "@anthropic-ai/sdk";
-import { AnthropicVertex } from "@anthropic-ai/vertex-sdk";
-import { GoogleAuth } from "google-auth-library";
-
-export type Provider = "vertex" | "anthropic";
-
-/**
- * The client the forecaster holds.
+ * Vertex wins when both are set: it is the more deliberate configuration, and a
+ * stale key left in the environment should not silently redirect spend.
  *
- * A union rather than a shared interface: the two SDKs are not structurally
- * identical — the Vertex client's `messages` omits the Batch API, which Vertex
- * does not have — but `messages.create` is the same call on both, and that is
- * the entire surface the forecaster uses.
+ * The variable names are Google's own (`GOOGLE_CLOUD_PROJECT`,
+ * `GOOGLE_CLOUD_LOCATION`, `GEMINI_API_KEY`) rather than names of our
+ * invention, because the SDK already reads exactly these.
  */
-export type ForecastClient = Anthropic | AnthropicVertex;
+import { GoogleGenAI } from "@google/genai";
+import type { GoogleAuthOptions } from "google-auth-library";
 
-/** Vertex needs this scope; the SDK's own default sets it too. */
-const CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform";
+export type Provider = "vertex" | "gemini-api";
+
+/** The client the forecaster holds. One SDK serves both providers. */
+export type ForecastClient = GoogleGenAI;
 
 /**
  * Which provider is configured, if any.
@@ -42,21 +35,26 @@ const CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform";
  * site runs without a forecaster and says so.
  */
 export function activeProvider(): Provider | null {
-  if (process.env["ANTHROPIC_VERTEX_PROJECT_ID"]) return "vertex";
-  if (process.env["ANTHROPIC_API_KEY"]) return "anthropic";
+  if (process.env["GOOGLE_CLOUD_PROJECT"]) return "vertex";
+  if (process.env["GEMINI_API_KEY"]) return "gemini-api";
   return null;
 }
 
 /**
  * The model to ask for.
  *
- * Overridable because Vertex model availability is per project and per region —
- * a model enabled in one GCP project may simply not exist in another, and that
- * is a deployment fact rather than a code change. Vertex uses the same bare
- * model id as the first-party API for current-generation models.
+ * Flash rather than Pro by default, and that is a considered trade. The call
+ * runs inside a serverless function against a window that closes, so a slower
+ * forecast is a MISSED forecast — the one failure that costs more than a
+ * slightly worse estimate. The judgement itself is small: weigh a weak base
+ * rate against a market price. Set AI_MODEL to a Pro model if you would rather
+ * spend the latency.
+ *
+ * Overridable also because availability differs by project and region, which is
+ * a deployment fact rather than a code change.
  */
 export function modelId(): string {
-  return process.env["AI_MODEL"] ?? "claude-opus-5";
+  return process.env["AI_MODEL"] ?? "gemini-2.5-flash";
 }
 
 /**
@@ -71,7 +69,7 @@ export function modelId(): string {
  * So a service-account key may be supplied inline as JSON. Returning undefined
  * falls through to ADC, which is the right behaviour locally.
  */
-export function serviceAccountAuth(): GoogleAuth | undefined {
+export function serviceAccountCredentials(): GoogleAuthOptions | undefined {
   const raw = process.env["GOOGLE_SERVICE_ACCOUNT_JSON"];
   if (!raw || raw.trim() === "") return undefined;
 
@@ -98,62 +96,43 @@ export function serviceAccountAuth(): GoogleAuth | undefined {
     );
   }
 
-  return new GoogleAuth({ credentials, scopes: CLOUD_PLATFORM_SCOPE });
+  return { credentials };
 }
 
 /**
  * Build the client for whichever provider is configured.
  *
  * Returns null when none is. Throws only when a provider is configured but
- * configured WRONGLY — bad credentials are a deployment mistake worth surfacing,
- * unlike a missing key, which is a legitimate state.
+ * configured WRONGLY — a bad service-account blob is a deployment mistake worth
+ * surfacing, unlike a missing key, which is a legitimate state.
  *
- * **Async on purpose, and it matters.** `new AnthropicVertex(...)` resolves its
- * auth client in the CONSTRUCTOR and keeps the promise privately. Left alone,
- * a credential failure becomes an *unhandled rejection* — the constructor
- * returns a healthy-looking client, and the process dies later from a promise
- * nobody can reach. Awaiting the credential here turns that into an ordinary
- * error the caller already handles, and the forecaster simply reports offline.
- *
- * With a service-account key this resolves locally, no network.
+ * Synchronous because this SDK resolves credentials LAZILY, on first request —
+ * verified, not assumed. A credential failure therefore arrives as an ordinary
+ * rejection from `generateContent`, which `forecast.ts` already catches, rather
+ * than as an unhandled rejection from a promise created in the constructor.
  */
-export async function createForecastClient(opts: {
-  timeoutMs: number;
-  maxRetries: number;
-}): Promise<{ client: ForecastClient; provider: Provider } | null> {
+export function createForecastClient(): { client: ForecastClient; provider: Provider } | null {
   const provider = activeProvider();
   if (provider === null) return null;
 
   if (provider === "vertex") {
-    const auth = serviceAccountAuth() ?? new GoogleAuth({ scopes: CLOUD_PLATFORM_SCOPE });
-
-    let authClient: Awaited<ReturnType<GoogleAuth["getClient"]>>;
-    try {
-      authClient = await auth.getClient();
-    } catch (e) {
-      throw new Error(
-        "Could not load Google credentials for Vertex AI. Locally, run " +
-          "`gcloud auth application-default login`; on a serverless host, set " +
-          `GOOGLE_SERVICE_ACCOUNT_JSON. (${e instanceof Error ? e.message : "unknown"})`,
-      );
-    }
-
-    const client = new AnthropicVertex({
-      // Both read their own env vars when omitted, but passing them explicitly
-      // keeps the failure legible: a missing region here is a clear message
-      // rather than a 404 against a URL built from an empty string.
-      projectId: process.env["ANTHROPIC_VERTEX_PROJECT_ID"] as string,
-      region: process.env["CLOUD_ML_REGION"] ?? "global",
-      timeout: opts.timeoutMs,
-      maxRetries: opts.maxRetries,
-      // Pre-resolved, so the client holds no promise that can reject unobserved.
-      authClient,
-    });
-    return { client, provider };
+    const auth = serviceAccountCredentials();
+    return {
+      client: new GoogleGenAI({
+        vertexai: true,
+        // The SDK reads these itself when omitted, but passing them explicitly
+        // keeps a failure legible: a missing project here is a clear message
+        // rather than a 404 against a URL built from an empty string.
+        project: process.env["GOOGLE_CLOUD_PROJECT"] as string,
+        location: process.env["GOOGLE_CLOUD_LOCATION"] ?? "global",
+        ...(auth ? { googleAuthOptions: auth } : {}),
+      }),
+      provider,
+    };
   }
 
   return {
-    client: new Anthropic({ timeout: opts.timeoutMs, maxRetries: opts.maxRetries }),
+    client: new GoogleGenAI({ apiKey: process.env["GEMINI_API_KEY"] as string }),
     provider,
   };
 }
@@ -161,9 +140,9 @@ export async function createForecastClient(opts: {
 /** Human-readable, for the probe and the AI page. */
 export function describeProvider(provider: Provider): string {
   if (provider === "vertex") {
-    const region = process.env["CLOUD_ML_REGION"] ?? "global";
-    const project = process.env["ANTHROPIC_VERTEX_PROJECT_ID"] ?? "?";
-    return `Vertex AI (${project} · ${region})`;
+    const location = process.env["GOOGLE_CLOUD_LOCATION"] ?? "global";
+    const project = process.env["GOOGLE_CLOUD_PROJECT"] ?? "?";
+    return `Vertex AI (${project} · ${location})`;
   }
-  return "Claude API";
+  return "Gemini API";
 }
