@@ -3,7 +3,7 @@ import {
   getStandings, currentWeekId, getRecentForecasts, getForecastSummary, getWalletCalls,
 } from "@predictarena/db";
 import { BRIER_COIN_FLIP } from "@predictarena/db";
-import { unitsToBps, isConfigured } from "@predictarena/ai";
+import { unitsToBps, isConfigured, activeProvider, describeProvider, modelId } from "@predictarena/ai";
 import { serverDb, serverDex, aiWallet, dbRead } from "@/lib/server";
 import { rateLimit, clientKey, tooManyRequests } from "@/lib/rateLimit";
 import { cached } from "@/lib/cache";
@@ -55,8 +55,15 @@ export async function GET(request: Request): Promise<NextResponse> {
   const configured = isConfigured() && wallet !== null;
 
   if (!wallet) {
+    // Report the provider even with no wallet: on a fresh deploy, "the model
+    // is reachable but AI_PRIVATE_KEY is missing" and "nothing is configured
+    // at all" are very different problems, and this is where you look.
+    const half = activeProvider();
     const body: AiResponse = {
-      configured: false, wallet: null, weekId, standing: null,
+      configured: false,
+      provider: half ? describeProvider(half) : null,
+      model: half ? modelId() : null,
+      wallet: null, weekId, standing: null,
       fieldBrier: null, fieldEdge: null, rankedPlayers: 0,
       summary: { total: 0, placed: 0, passed: 0 }, coinFlipBrier: BRIER_COIN_FLIP, forecasts: [],
     };
@@ -112,8 +119,11 @@ export async function GET(request: Request): Promise<NextResponse> {
       outcome: r.action === "PLACE" ? (outcomeByWindow.get(r.windowId) ?? null) : null,
     }));
 
+    const active = activeProvider();
     const body: AiResponse = {
       configured,
+      provider: active ? describeProvider(active) : null,
+      model: active ? modelId() : null,
       wallet,
       weekId,
       standing: standing ? { ...standing, displayName: null } : null,

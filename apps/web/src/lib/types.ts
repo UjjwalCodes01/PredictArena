@@ -134,8 +134,12 @@ export interface ForecastDto {
 }
 
 export interface AiResponse {
-  /** False when no API key is set. The page says so rather than looking broken. */
+  /** False when no provider is set up. The page says so rather than looking broken. */
   readonly configured: boolean;
+  /** Which backend serves it, e.g. "Vertex AI (proj · global)". Null when offline. */
+  readonly provider: string | null;
+  /** The model being asked. Null when offline. */
+  readonly model: string | null;
   readonly wallet: string | null;
   readonly weekId: string;
   /** The forecaster's row on the same leaderboard as everyone else. */

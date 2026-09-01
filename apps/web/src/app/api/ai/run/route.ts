@@ -38,7 +38,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   if (!isConfigured()) {
     return NextResponse.json(
-      { ran: false, reason: "no API key" },
+      { ran: false, reason: "no model provider configured" },
       { headers: { "cache-control": "no-store" } },
     );
   }

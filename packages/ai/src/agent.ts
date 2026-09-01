@@ -79,7 +79,7 @@ export async function runAgent(opts: AgentOptions): Promise<AgentRun> {
   const notes: string[] = [];
 
   if (!isConfigured()) {
-    return { considered: 0, forecast: 0, placed: 0, passed: 0, skipped: 0, notes: ["no API key"] };
+    return { considered: 0, forecast: 0, placed: 0, passed: 0, skipped: 0, notes: ["no model provider configured"] };
   }
 
   const decimals = dex.collateral.decimals;

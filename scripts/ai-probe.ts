@@ -6,8 +6,9 @@
  * It signs nothing and writes nothing, so it is safe to run repeatedly while
  * tuning the threshold or checking a new key.
  *
- * This is the check to run FIRST after setting ANTHROPIC_API_KEY. `pnpm smoke`
- * proves the venue path; this proves the forecaster on top of it.
+ * This is the check to run FIRST after configuring a provider — Vertex AI or
+ * the first-party Claude API. `pnpm smoke` proves the venue path; this proves
+ * the forecaster on top of it, and reports which backend answered.
  *
  * Flags:
  *   --asset BTC|ETH   default BTC
@@ -19,6 +20,7 @@ import {
 } from "@predictarena/dex";
 import {
   forecastWindow, isConfigured, decide, buildPrompt, unitsToBps, MIN_EDGE_BPS,
+  activeProvider, describeProvider, modelId,
   type WindowContext,
 } from "@predictarena/ai";
 import { createClientOrExit } from "./lib/env.js";
@@ -43,11 +45,22 @@ function pct(bps: number): string {
 async function main(): Promise<void> {
   heading("AI forecaster probe");
 
-  if (!isConfigured()) {
-    console.error(red("  ANTHROPIC_API_KEY is not set."));
-    info("Add it to .env — see the AI forecaster block in .env.example.");
-    info("Get a key at https://console.anthropic.com/settings/keys");
+  const provider = activeProvider();
+  if (!isConfigured() || provider === null) {
+    console.error(red("  No model provider is configured."));
+    info("Set ONE of these in .env — see the AI forecaster block in .env.example:");
+    info("  ANTHROPIC_VERTEX_PROJECT_ID  (Vertex AI, plus `gcloud auth application-default login`)");
+    info("  ANTHROPIC_API_KEY            (first-party Claude API)");
     process.exit(1);
+  }
+
+  kv("Provider", bold(describeProvider(provider)));
+  kv("Model", modelId());
+  if (provider === "vertex" && !process.env["GOOGLE_SERVICE_ACCOUNT_JSON"]) {
+    // The commonest local failure by a mile, and the error it produces
+    // otherwise ("Could not load the default credentials") explains nothing.
+    info(dim("Using Application Default Credentials. If this fails, run:"));
+    info(dim("  gcloud auth application-default login"));
   }
 
   const { client } = createClientOrExit();
@@ -102,7 +115,14 @@ async function main(): Promise<void> {
 
     if (!result) {
       console.error(red("  No forecast returned."));
-      info("Check the key, and look for an [ai] line above explaining why.");
+      info("Look for an [ai] line above — it names the cause.");
+      if (provider === "vertex") {
+        info(
+          `On Vertex, the usual causes are: ${modelId()} not enabled in Model Garden for ` +
+            `this project/region, the service account missing the "Vertex AI User" role, ` +
+            `or expired ADC.`,
+        );
+      }
       continue;
     }
 
@@ -110,7 +130,7 @@ async function main(): Promise<void> {
     kv("Estimate", `${bold(pct(f.probabilityUpBps))} Up · ${f.confidence} confidence · ${ms}ms`);
     kv("Rationale", f.rationale);
     if (f.keyFactors.length > 0) kv("Factors", f.keyFactors.join(", "));
-    kv("Tokens", `${result.inputTokens} in / ${result.outputTokens} out`);
+    kv("Tokens", `${result.inputTokens} in / ${result.outputTokens} out · via ${result.provider}`);
 
     const decision = decide({ forecast: f, book, decimals });
     const edgeBps = unitsToBps(decision.edge, decimals);
@@ -152,7 +172,9 @@ async function main(): Promise<void> {
     `The threshold is ${pct(MIN_EDGE_BPS)} of edge, widened for a less confident estimate. ` +
       `Passing is the expected outcome most of the time.`,
   );
-  console.log(green("\n  Forecaster is working. Nothing was signed or written.\n"));
+  console.log(
+    green(`\n  Forecaster is working on ${describeProvider(provider)}. Nothing was signed or written.\n`),
+  );
 }
 
 main().catch((e) => {

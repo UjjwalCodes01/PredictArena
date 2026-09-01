@@ -45,6 +45,7 @@ spending a token:
 |---|---|---|
 | `prompt.ts` | What the model is told; validation of what comes back | yes |
 | `decide.ts` | Whether an estimate is worth trading | yes |
+| `provider.ts` | Which backend, and how it authenticates | yes |
 | `forecast.ts` | The one API call | no — fails to `null` |
 | `agent.ts` | One pass over the live board | no |
 
@@ -77,18 +78,93 @@ Three properties, each enforced by construction rather than by care:
    the server's own configuration. A browser never gets to say who the
    forecaster is.
 
+## Providers
+
+It runs on **Google Cloud Vertex AI** or the **first-party Claude API**. The
+request body is identical on both — every feature it uses is GA on Vertex:
+
+| Feature it uses | Vertex |
+|---|---|
+| Messages | Yes |
+| Structured outputs (`json_schema`) | Yes |
+| Adaptive thinking | Yes |
+| Effort | Yes |
+
+Nothing it uses is first-party-only. The one thing that *would* have been —
+server-side refusal `fallbacks`, unsupported on Vertex — was already left out
+on its own merits (see the last section).
+
+`provider.ts` picks the backend from the environment. **Vertex wins when both
+are configured**: it is the more deliberate setup, and a stale
+`ANTHROPIC_API_KEY` left in an environment should not silently redirect spend.
+
 ## Running it
 
-```bash
-# 1. Set the key and the wallet in .env (see the AI forecaster block there)
-ANTHROPIC_API_KEY=sk-ant-...
-AI_PRIVATE_KEY=0x...        # a burner; fund it with STT and tUSDC like any player
+### Vertex AI
 
-# 2. Prove it works. Dry run: reads live windows, calls the model, prints what
-#    it WOULD do. Signs nothing, writes nothing.
+```bash
+# .env
+ANTHROPIC_VERTEX_PROJECT_ID=your-gcp-project
+CLOUD_ML_REGION=global          # or us-east5, europe-west1, ...
+AI_PRIVATE_KEY=0x...            # a burner; fund with STT + tUSDC like any player
+```
+
+Locally, authenticate with Application Default Credentials — nothing else needed:
+
+```bash
+gcloud auth application-default login
+pnpm ai:probe
+```
+
+Before the first run, in the GCP console: enable the **Vertex AI API**, and
+enable the Claude model in **Model Garden** for that project *and region*.
+Model availability differs by region, which is why `AI_MODEL` is overridable.
+
+### First-party Claude API
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-...    # console.anthropic.com/settings/keys
+```
+
+### Prove it, either way
+
+A dry run: reads live windows, calls the model, prints what it *would* do.
+Signs nothing, writes nothing, and names the backend that answered.
+
+```bash
 pnpm ai:probe
 pnpm ai:probe --asset ETH --count 3 --prompt
 ```
+
+## Deploying Vertex to Vercel
+
+ADC does not exist on Vercel — no `gcloud`, no metadata server — and
+`GOOGLE_APPLICATION_CREDENTIALS` is useless there because it wants a **file
+path** on a read-only filesystem. So supply the key inline instead:
+
+1. Create a service account with the **Vertex AI User** role.
+2. Download its JSON key.
+3. Set `GOOGLE_SERVICE_ACCOUNT_JSON` to the whole file on one line.
+
+If the dashboard mangles the newlines inside `private_key` — a common and
+confusing failure — base64 it instead; the code detects the encoding by shape:
+
+```bash
+cat key.json | base64 -w0
+```
+
+Vercel env vars, for the record:
+
+| Variable | Value |
+|---|---|
+| `ANTHROPIC_VERTEX_PROJECT_ID` | your GCP project id |
+| `CLOUD_ML_REGION` | `global`, or a specific region |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | the key JSON, or its base64 |
+| `AI_PRIVATE_KEY` | the forecaster's burner key |
+| `AI_MODEL` | optional, if Opus 5 is not enabled for you |
+
+A malformed credential blob throws with a message naming the actual problem,
+rather than failing later as an opaque "could not load default credentials".
 
 In production it runs off ordinary traffic, like ingestion — there is nowhere
 free and reliable to host a daemon. `/api/ai/run` is poked by `KeepFresh`
@@ -101,7 +177,7 @@ would let it trade N times as often as intended purely because traffic was
 spread around. Floor is 150 seconds between runs, globally, with at most one
 placement per run.
 
-## Without a key
+## Without a provider
 
 The site works exactly as it does with the forecaster running. The AI page says
 it is offline; the per-window read renders nothing; the leaderboard has one
@@ -123,6 +199,8 @@ that cannot be checked.
 Server-side refusal fallbacks (`betas: ["server-side-fallback-2026-07-01"]`)
 are **not** enabled. A price-direction forecast has essentially no refusal
 surface, a refusal already degrades safely to a pass, and an untested beta
-header in a demo hot path is a worse risk than the one it removes. If you want
-it, add the beta and `fallbacks: "default"` to the request in `forecast.ts` and
-verify with `pnpm ai:probe` before relying on it.
+header in a demo hot path is a worse risk than the one it removes.
+
+That call turned out to be free: `fallbacks` is unsupported on Vertex AI
+anyway, so wiring it would have had to be undone. On Vertex the equivalent is
+the SDK's client-side `betaRefusalFallbackMiddleware`, if it is ever wanted.

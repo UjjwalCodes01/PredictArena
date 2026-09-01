@@ -184,7 +184,11 @@ export default function AiPage() {
         <Card>
           <Empty
             title="The forecaster is offline"
-            hint="No ANTHROPIC_API_KEY is configured on this deployment, so nothing is forecasting. Everything else on the site works exactly as it does with it running."
+            hint={
+              data?.provider
+                ? `${data.provider} is configured, but the forecaster has no wallet — set AI_PRIVATE_KEY. Everything else on the site works exactly as it does with it running.`
+                : "No model provider is configured on this deployment — neither Vertex AI nor a Claude API key — so nothing is forecasting. Everything else on the site works exactly as it does with it running."
+            }
           />
         </Card>
       ) : (
@@ -193,14 +197,21 @@ export default function AiPage() {
           <Panel
             label="RECORD"
             aside={
-              data.wallet ? (
-                <Link
-                  href={`/p/${data.wallet}`}
-                  className="tabular text-xs text-ink-faint hover:text-ink"
-                >
-                  {shortAddress(data.wallet)}
-                </Link>
-              ) : null
+              <div className="flex items-center gap-3">
+                {data.provider ? (
+                  <span className="label text-ink-faint" title={data.model ?? undefined}>
+                    {data.provider}
+                  </span>
+                ) : null}
+                {data.wallet ? (
+                  <Link
+                    href={`/p/${data.wallet}`}
+                    className="tabular text-xs text-ink-faint hover:text-ink"
+                  >
+                    {shortAddress(data.wallet)}
+                  </Link>
+                ) : null}
+              </div>
             }
           >
             {s === null ? (
@@ -279,8 +290,8 @@ export default function AiPage() {
                   and how the last twelve windows on that series actually resolved.
                 </li>
                 <li>
-                  <span className="text-ink">2.</span> Claude estimates the probability the window
-                  closes Up, and states how much it trusts its own estimate.
+                  <span className="text-ink">2.</span> {data.model ?? "Claude"} estimates the
+                  probability the window closes Up, and states how much it trusts its own estimate.
                 </li>
                 <li>
                   <span className="text-ink">3.</span> That estimate is compared to what the book is
