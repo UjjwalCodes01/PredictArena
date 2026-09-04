@@ -122,21 +122,52 @@ export async function withDeadline<T>(
  * Returns null when the forecaster is not configured, which is a supported
  * state: the site runs without it and says so.
  */
+/**
+ * Read the forecaster's key, tolerating how it arrives.
+ *
+ * A dashboard textarea is not a config file: it leaves trailing newlines, it
+ * picks up a stray space, and people paste raw hex without the `0x`. A strict
+ * anchored match on all of that returns null, which this code treats as "no
+ * forecaster configured" — so a one-character paste artifact silently turns the
+ * feature off and reports nothing. That happened in production.
+ *
+ * So: normalise what can be normalised, and when a key is present but genuinely
+ * unusable, SAY SO rather than degrading into silence.
+ */
+function readAiKey(): `0x${string}` | null {
+  const raw = process.env["AI_PRIVATE_KEY"];
+  if (!raw || raw.trim() === "") return null;
+
+  // Strip whitespace and quotes a dashboard or shell may have added.
+  let key = raw.trim().replace(/^["']|["']$/g, "");
+  if (!key.startsWith("0x") && /^[0-9a-fA-F]{64}$/.test(key)) key = `0x${key}`;
+
+  if (!/^0x[0-9a-fA-F]{64}$/.test(key)) {
+    console.error(
+      `[ai] AI_PRIVATE_KEY is set but is not a 32-byte hex key ` +
+        `(got ${key.length} chars${key.startsWith("0x") ? "" : ", no 0x prefix"}). ` +
+        `The forecaster is disabled. Paste the private key, not an address.`,
+    );
+    return null;
+  }
+  return key as `0x${string}`;
+}
+
 let aiSingleton: { dex: DexClient; wallet: `0x${string}` } | null = null;
 
 export function aiDex(): { dex: DexClient; wallet: `0x${string}` } | null {
   if (aiSingleton) return aiSingleton;
 
-  const key = process.env["AI_PRIVATE_KEY"];
-  if (!key || !/^0x[0-9a-fA-F]{64}$/.test(key)) return null;
+  const key = readAiKey();
+  if (!key) return null;
 
-  const account = privateKeyToAccount(key as `0x${string}`);
+  const account = privateKeyToAccount(key);
   aiSingleton = {
     dex: createDexClient({
       indexerUrl: process.env["INDEXER_URL"] ?? "https://dev.smk.somnia.host/v1/graphql",
       rpcHttpUrl: process.env["RPC_HTTP_URL"] ?? "https://dream-rpc.somnia.network",
       rpcWsUrl: process.env["RPC_WS_URL"] ?? "wss://dream-rpc.somnia.network/ws",
-      privateKey: key as `0x${string}`,
+      privateKey: key,
     }),
     wallet: account.address,
   };
@@ -150,7 +181,7 @@ export function aiDex(): { dex: DexClient; wallet: `0x${string}` } | null {
  * to hold a key to do that.
  */
 export function aiWallet(): `0x${string}` | null {
-  const key = process.env["AI_PRIVATE_KEY"];
-  if (!key || !/^0x[0-9a-fA-F]{64}$/.test(key)) return null;
-  return privateKeyToAccount(key as `0x${string}`).address;
+  const key = readAiKey();
+  if (!key) return null;
+  return privateKeyToAccount(key).address;
 }
