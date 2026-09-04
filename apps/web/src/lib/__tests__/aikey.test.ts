@@ -9,6 +9,16 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+/*
+ * Env-var-driven initialisation can only be tested by reloading the module,
+ * and `../server` pulls in viem plus both workspace packages on every reload.
+ * That costs ~1.4s here even when the machine is idle, and under the full
+ * suite's parallel load it intermittently blew the 5s default and failed a
+ * test that has nothing wrong with it. The work is inherent to what is being
+ * tested, so the budget is raised rather than the test weakened.
+ */
+vi.setConfig({ testTimeout: 30_000 });
+
 const KEY = `0x${"a".repeat(64)}` as const;
 let saved: string | undefined;
 

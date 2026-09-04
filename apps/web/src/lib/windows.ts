@@ -32,6 +32,21 @@ import { serverDb, withDeadline, dbRead } from "./server";
 let venueFailedAt = 0;
 const VENUE_COOLDOWN_MS = 60_000;
 
+/**
+ * Is the venue indexer currently being bypassed?
+ *
+ * True for a short window after a venue failure, during which `windowsFor`
+ * reads the chain directly instead of asking the venue. Exposed so a caller —
+ * `/api/health` in particular — can report "the site works, but the venue is
+ * having trouble" as its own state, distinct from either "everything is fine"
+ * or "the site itself is down". Collapsing that middle case into a plain
+ * "down" is what made health cry wolf during a venue hiccup the site had
+ * already survived.
+ */
+export function venueDegraded(): boolean {
+  return Date.now() - venueFailedAt < VENUE_COOLDOWN_MS;
+}
+
 export function windowsFor(
   dex: DexClient,
   opts: { asset?: string | undefined; intervalSec?: number | undefined } = {},

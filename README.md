@@ -35,8 +35,8 @@ shows a dash rather than a number nobody should trust.
 ### The leaderboard is not seeded
 
 It scores **every wallet trading these markets**, derived from public chain
-fills — not just people who signed up. As of writing: **377 wallets, 6,265
-calls, 549 windows, 197 ranked players** in the current week. You are ranked
+fills — not just people who signed up. As of writing: **1,210 wallets, 58,699
+calls, 1,647 windows, 996 ranked players** in the current week. You are ranked
 against people who have no idea the league exists, which is a much harder test
 than a demo table of three seeded accounts.
 
@@ -228,7 +228,7 @@ pnpm smoke       # LIVE round trip: quote → place → settle → redeem
 pnpm ai:probe    # forecaster dry run: calls the model, signs nothing
 ```
 
-Every change runs `pnpm typecheck && pnpm lint && pnpm test` (354 tests).
+Every change runs `pnpm typecheck && pnpm lint && pnpm test` (377 tests).
 
 ---
 

@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
 import { getSyncState, currentWeekId } from "@predictarena/db";
-import { getWindows } from "@predictarena/dex";
 import { serverDb, serverDex, dbRead, withDeadline } from "@/lib/server";
+import { windowsFor, venueDegraded } from "@/lib/windows";
 import { rateLimit, clientKey, tooManyRequests } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
+/**
+ * `windowsFor` pays the venue's own timeout (~7s) once before falling back to
+ * reading the chain directly (up to ~25s more). The platform default would
+ * kill this function before that fallback finishes.
+ */
+export const maxDuration = 60;
 
 /**
  * Machine-readable health, for an uptime monitor to poll.
@@ -18,11 +24,20 @@ export const dynamic = "force-dynamic";
  *
  *   database — can we read at all
  *   indexer  — has it reported recently
- *   chain    — is the venue reachable and serving live windows
+ *   chain    — can a player actually see windows right now
  *
- * Returns 200 only when everything is healthy, and 503 otherwise, so a plain
- * HTTP uptime check (UptimeRobot, Better Stack, a curl in cron) alerts without
- * needing to parse the body.
+ * The chain check goes through `windowsFor` — the exact path `/api/windows`
+ * uses, fallback included — rather than a raw venue call. It used to call the
+ * venue directly, and a venue hiccup made health report "down" while the site
+ * itself kept working: measured in production, the raw call timed out at 20s
+ * while `/api/windows` served real windows in 9s via the chain fallback. A
+ * check that alarms on an outage the product already survived gets muted,
+ * which is worse than no check, so it now reports what the check exists to
+ * report — a THIRD state, "degraded", for exactly that case: the site works,
+ * but the venue is not the one serving it right now.
+ *
+ * HTTP status stays binary for a plain uptime monitor: 200 for ok or
+ * degraded (the site works either way), 503 only for a real down.
  */
 
 /** The indexer heartbeats every 30s; three missed beats is a real problem. */
@@ -41,6 +56,40 @@ async function timed(fn: () => Promise<string>): Promise<Check> {
   try {
     const detail = await fn();
     return { status: "ok", detail, ms: Date.now() - started };
+  } catch (e) {
+    return {
+      status: "down",
+      detail: e instanceof Error ? e.message.slice(0, 120) : "failed",
+      ms: Date.now() - started,
+    };
+  }
+}
+
+/**
+ * The chain check, kept out of `timed()` because it is the one check with
+ * three possible outcomes rather than two.
+ */
+async function checkChain(): Promise<Check> {
+  const started = Date.now();
+  try {
+    // An outer bound independent of windowsFor's own internal deadlines —
+    // defense in depth, so a health request itself cannot hang past this
+    // regardless of what changes inside that function later.
+    const windows = await withDeadline("chainCheck", 35_000, () => windowsFor(serverDex()));
+    if (windows.length === 0) {
+      // Genuinely nothing listed at all — that IS a venue problem, fallback
+      // included: an empty candidate list falls through to an empty result.
+      throw new Error("venue listed no markets at all");
+    }
+    const tradable = windows.filter((w) => w.isTradable).length;
+    const degraded = venueDegraded();
+    return {
+      status: degraded ? "degraded" : "ok",
+      detail: degraded
+        ? `${windows.length} markets, ${tradable} tradable — venue indexer unreachable, served from chain`
+        : `${windows.length} markets, ${tradable} tradable`,
+      ms: Date.now() - started,
+    };
   } catch (e) {
     return {
       status: "down",
@@ -69,36 +118,16 @@ export async function GET(request: Request): Promise<NextResponse> {
       }
       return `reported ${ageSec}s ago`;
     }),
-    timed(async () => {
-      /*
-       * Ask whether the venue ANSWERS, not whether it currently has tradable
-       * windows.
-       *
-       * This used to call `getWindows({ limit: 5 })` and fail on an empty
-       * result. `limit` is a fetch budget applied BEFORE the tradable filter,
-       * so a healthy venue whose first five rows happen to be mid-roll
-       * returned zero — and the check reported "chain down" while
-       * /api/windows was serving three windows perfectly well.
-       *
-       * A monitor that cries wolf gets muted, which is worse than no monitor.
-       * So: reachable and answering is healthy. Having nothing tradable right
-       * now is a fact about the schedule, and it is reported rather than
-       * treated as an outage.
-       */
-      const windows = await withDeadline("getWindows", 20_000, () =>
-        getWindows(serverDex(), { includeUntradable: true, limit: 20 }),
-      );
-      if (windows.length === 0) {
-        // Genuinely nothing listed at all — that IS a venue problem.
-        throw new Error("venue listed no markets at all");
-      }
-      const tradable = windows.filter((w) => w.isTradable).length;
-      return `${windows.length} markets, ${tradable} tradable`;
-    }),
+    checkChain(),
   ]);
 
   const checks = { database, indexer, chain };
-  const worst: Status = Object.values(checks).some((c) => c.status === "down") ? "down" : "ok";
+  const statuses = Object.values(checks).map((c) => c.status);
+  const worst: Status = statuses.includes("down")
+    ? "down"
+    : statuses.includes("degraded")
+      ? "degraded"
+      : "ok";
 
   return NextResponse.json(
     {
@@ -109,7 +138,9 @@ export async function GET(request: Request): Promise<NextResponse> {
       at: new Date().toISOString(),
     },
     {
-      status: worst === "ok" ? 200 : 503,
+      // Binary for a plain uptime monitor: the site works in both ok and
+      // degraded, so only a real down pages anyone.
+      status: worst === "down" ? 503 : 200,
       headers: { "cache-control": "no-store" },
     },
   );
