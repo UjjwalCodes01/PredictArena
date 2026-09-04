@@ -20,7 +20,13 @@
       "Bash(pnpm vitest *)",
       "Bash(sed 's|^|  |')",
       "Bash(sed -n '/export async function GET/,/^}/p' apps/web/src/app/api/health/route.ts)",
-      "Bash(curl -s --max-time 50 https://predictarena-gamma.vercel.app/api/health)"
+      "Bash(curl -s --max-time 50 https://predictarena-gamma.vercel.app/api/health)",
+      "Bash(awk -F/ '{print $1}')",
+      "Bash(python3 -)",
+      "Bash(git rm *)",
+      "Bash(timeout 120 pnpm gate)",
+      "Bash(timeout 90 pnpm db:check)",
+      "Bash(curl -s --max-time 45 https://predictarena-gamma.vercel.app/api/health)"
     ]
   }
 }

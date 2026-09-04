@@ -9,6 +9,29 @@ the board. Then find out the thing prediction markets never tell you:
 
 **Live: https://predictarena-gamma.vercel.app** · Testnet only — the tokens have no value.
 
+| | |
+|---|---|
+| **Live app** | https://predictarena-gamma.vercel.app |
+| **Network** | Somnia Shannon testnet (chain `50312`) |
+| **Venue** | DreamDEX Event Contracts — Up/Down binary markets on BTC and ETH |
+| **Collateral** | tUSDC (6dp), mintable in-app |
+| **Stack** | Next.js 16 · React 19 · wagmi/viem · Drizzle + Neon · pnpm workspace, TypeScript strict |
+| **Verification** | 377 tests · typecheck · 2 custom lint rules · bundle secret-scan, all in CI |
+| **Example settled tx** | [`0xc48d4941…`](https://shannon-explorer.somnia.network/tx/0xc48d49413de7ea0bde898c7bd5586c2885db52f133a2274a848fdc0e32f3fff8) |
+
+### Sixty-second tour
+
+1. **[/](https://predictarena-gamma.vercel.app)** — a live BTC window with a countdown. Connect, tap
+   Up or Down, sign. The order is real and goes to a real contract.
+2. **[/leaderboard](https://predictarena-gamma.vercel.app/leaderboard)** — hover the **Edge** column.
+   That number, not points, is the product's actual claim.
+3. **[/ai](https://predictarena-gamma.vercel.app/ai)** — an AI forecaster ranked on the same board
+   by the same metrics. Scroll to its log and note how often it **passes**.
+4. **[/terminal](https://predictarena-gamma.vercel.app/terminal)** — every live series at once.
+
+No sign-up. Your wallet is the account. The **Get funds** button mints testnet
+collateral, so a judge with an empty wallet can complete the whole flow.
+
 ---
 
 ## Why this exists
@@ -112,7 +135,7 @@ Details: [docs/ai-forecaster.md](docs/ai-forecaster.md).
    reach the network directly.
 3. **No floats for money.** Amounts are `bigint` end to end; formatting happens
    only at display. Enforced by [`scripts/lint-no-float-money.ts`](scripts/lint-no-float-money.ts),
-   which fails CI — it scans 88 files.
+   which fails CI — it scans 89 files.
 4. **Testnet only.** Mainnet chain id, RPC and API are rejected at runtime and by
    [`scripts/lint-no-mainnet.ts`](scripts/lint-no-mainnet.ts).
 5. **Client input is untrusted.** Wins and losses are derived from chain reads
@@ -300,10 +323,10 @@ credible.
 
 | Path | Lines | What |
 |---|---|---|
-| [`packages/dex`](packages/dex) | 2,691 | The only seam to DreamDEX |
+| [`packages/dex`](packages/dex) | 2,962 | The only seam to DreamDEX |
 | [`packages/db`](packages/db) | 3,034 | Schema, queries, pure scoring engine |
-| [`packages/ai`](packages/ai) | 1,899 | The AI forecaster |
-| [`apps/web`](apps/web) | 8,807 | Next.js app |
+| [`packages/ai`](packages/ai) | 1,977 | The AI forecaster |
+| [`apps/web`](apps/web) | 9,182 | Next.js app |
 | [`apps/indexer`](apps/indexer) | 897 | Ingest and reconcile |
 
 **Further reading**

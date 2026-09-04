@@ -81,7 +81,7 @@ orders.
 
 ## 3. It is an order book, not a fixed-payout bet
 
-resource.md describes "Correct call = fixed payout". The real mechanism is a CLOB over probabilities.
+Our early notes assumed "correct call = fixed payout". The real mechanism is a CLOB over probabilities.
 
 - **[DOCS]** Up and Down trade on a **single** order book quoted in Up terms; a Down price is always
   `1 − up price`. Prices are probabilities in `(0, 1)`.
@@ -290,7 +290,7 @@ The bot kit ships an entire Event Contract half our specs don't mention: `strate
 | stg REST | `https://stg.api.dreamdex.io/v0` | ✅ live — but **spot only** |
 | stg WS | `wss://stg.api.dreamdex.io/v0/ws/public` | ✅ live (HTTP 426 upgrade-required) — **spot only** |
 
-The network table in AGENTS.md §3 / resource.md §2 is accurate; it is simply the *wrong API* for
+The network table in AGENTS.md §3 is accurate; it is simply the *wrong API* for
 Event Contracts.
 
 ---
