@@ -23,8 +23,12 @@ export const maxDuration = 60;
  * So this checks the things that can independently break:
  *
  *   database — can we read at all
- *   indexer  — has it reported recently
+ *   indexer  — has the projection been written recently
  *   chain    — can a player actually see windows right now
+ *
+ * Each reports one of three states, because two was not enough to tell the
+ * truth: "down" for a real fault, "degraded" for a condition the deployed
+ * architecture expects and recovers from on its own, and "ok" otherwise.
  *
  * The chain check goes through `windowsFor` — the exact path `/api/windows`
  * uses, fallback included — rather than a raw venue call. It used to call the
@@ -40,8 +44,32 @@ export const maxDuration = 60;
  * degraded (the site works either way), 503 only for a real down.
  */
 
-/** The indexer heartbeats every 30s; three missed beats is a real problem. */
-const INDEXER_STALE_SEC = 150;
+/**
+ * How recently the projection must have been written to count as fresh.
+ *
+ * This used to be 150s, on the reasoning that "the indexer heartbeats every
+ * 30s, so three missed beats is a real problem". That daemon is not deployed.
+ * Ingestion is traffic-driven through `/api/tick`, which runs a cycle when
+ * someone loads a page and the data has gone stale, plus a GitHub cron that is
+ * dropped often enough to be unreliable (measured: one firing in an eight-hour
+ * window against a five-minute schedule).
+ *
+ * Under that design a stale heartbeat on an idle site is EXPECTED and
+ * self-healing — the next visitor refreshes it — so reporting it as "down"
+ * made health read as an outage whenever nobody happened to be browsing. The
+ * threshold now reflects the architecture that actually ships: recent enough
+ * that something is clearly driving ingestion.
+ */
+const INDEXER_FRESH_SEC = 600;
+
+/** Seconds as something a human reads at a glance: "2h 13m", "45s". */
+function humanAge(sec: number): string {
+  if (sec < 90) return `${sec}s`;
+  if (sec < 5_400) return `${Math.round(sec / 60)}m`;
+  const h = Math.floor(sec / 3_600);
+  const m = Math.round((sec % 3_600) / 60);
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
 
 type Status = "ok" | "degraded" | "down";
 
@@ -56,6 +84,39 @@ async function timed(fn: () => Promise<string>): Promise<Check> {
   try {
     const detail = await fn();
     return { status: "ok", detail, ms: Date.now() - started };
+  } catch (e) {
+    return {
+      status: "down",
+      detail: e instanceof Error ? e.message.slice(0, 120) : "failed",
+      ms: Date.now() - started,
+    };
+  }
+}
+
+/**
+ * Freshness of the projection, kept out of `timed()` for the same reason as
+ * the chain check: it has three outcomes, not two.
+ *
+ * Never having reported at all is the genuine fault — it means ingestion has
+ * never worked. Merely being behind is a fact about how recently someone
+ * looked at the site.
+ */
+async function checkIndexer(): Promise<Check> {
+  const started = Date.now();
+  try {
+    const hb = await dbRead(() => getSyncState(serverDb(), "heartbeat"));
+    const cursor = (hb as { cursor?: string } | null)?.cursor;
+    if (!cursor) throw new Error("ingestion has never reported");
+
+    const ageSec = Math.round((Date.now() - new Date(cursor).getTime()) / 1000);
+    const fresh = ageSec <= INDEXER_FRESH_SEC;
+    return {
+      status: fresh ? "ok" : "degraded",
+      detail: fresh
+        ? `reported ${humanAge(ageSec)} ago`
+        : `last reported ${humanAge(ageSec)} ago; refreshes on the next page view`,
+      ms: Date.now() - started,
+    };
   } catch (e) {
     return {
       status: "down",
@@ -108,16 +169,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       await dbRead(() => getSyncState(serverDb(), "heartbeat"));
       return "reachable";
     }),
-    timed(async () => {
-      const hb = await dbRead(() => getSyncState(serverDb(), "heartbeat"));
-      const cursor = (hb as { cursor?: string } | null)?.cursor;
-      if (!cursor) throw new Error("indexer has never reported");
-      const ageSec = Math.round((Date.now() - new Date(cursor).getTime()) / 1000);
-      if (ageSec > INDEXER_STALE_SEC) {
-        throw new Error(`last reported ${ageSec}s ago; results are stale`);
-      }
-      return `reported ${ageSec}s ago`;
-    }),
+    checkIndexer(),
     checkChain(),
   ]);
 

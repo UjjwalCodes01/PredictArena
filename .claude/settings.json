@@ -17,7 +17,10 @@
       "Bash(curl -s --max-time 20 \"https://predictarena-gamma.vercel.app/api/duels\")",
       "Bash(curl -s --max-time 20 \"https://predictarena-gamma.vercel.app/api/duels?wallet=0x7B89B524045dAa2626eE68cF8d2DAbD74b725872\")",
       "Bash(curl -s --max-time 30 https://predictarena-gamma.vercel.app/api/ai)",
-      "Bash(pnpm vitest *)"
+      "Bash(pnpm vitest *)",
+      "Bash(sed 's|^|  |')",
+      "Bash(sed -n '/export async function GET/,/^}/p' apps/web/src/app/api/health/route.ts)",
+      "Bash(curl -s --max-time 50 https://predictarena-gamma.vercel.app/api/health)"
     ]
   }
 }
