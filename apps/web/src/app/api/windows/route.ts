@@ -9,6 +9,15 @@ import type { WindowsResponse, WindowDto } from "@/lib/types";
 /** Live data: never cache. A stale window is a window a user cannot trade. */
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+/**
+ * Long enough to survive a venue outage.
+ *
+ * When the venue indexer hangs, this route pays its timeout once and then
+ * rebuilds the list from the chain. That is slower than the fast path and
+ * still far better than the 503 the alternative produces — but the platform
+ * default would kill it first.
+ */
+export const maxDuration = 60;
 
 /**
  * Live Up/Down windows for the feed.

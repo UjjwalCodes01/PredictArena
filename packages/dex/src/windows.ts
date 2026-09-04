@@ -62,6 +62,133 @@ export function headroomSecFor(intervalSec: number): number {
   return Math.max(5, Math.min(60, Math.ceil(intervalSec * 0.15)));
 }
 
+/**
+ * How long one candidate's on-chain read may take before it is abandoned.
+ *
+ * A healthy read measured 1.2-2.5s, so this is generous for a good market and
+ * short for a dead one.
+ */
+const CANDIDATE_READ_TIMEOUT_MS = 5_000;
+
+/** Reject rather than hang. The caller treats a rejection as "skip this one". */
+function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    work,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`read exceeded ${ms}ms`)), ms);
+    }),
+  ]).finally(() => {
+    if (timer) clearTimeout(timer);
+  }) as Promise<T>;
+}
+
+/**
+ * The minimum needed to rebuild a window WITHOUT the venue's indexer.
+ *
+ * Only the fields the chain cannot supply. Everything authoritative — pool,
+ * status, expiry, resolution — is read on-chain regardless of what a caller
+ * passes here.
+ */
+export interface WindowCandidate {
+  readonly marketId: `0x${string}`;
+  readonly asset: string;
+  readonly venueId?: string | null;
+  readonly intervalSec?: number | null;
+  readonly strike?: string | null;
+  readonly opensAtSec?: number | null;
+  readonly question?: string | null;
+}
+
+/**
+ * Build windows from candidate ids, using the chain alone.
+ *
+ * The venue's GraphQL indexer is a single point of failure for the entire
+ * product: `listLiveBinaryMarkets` is the only way to learn which markets
+ * exist, and when it stops answering — measured: a bare `Market(limit:1){id}`
+ * timing out at 31s while an invalid field errored in 1.6s — nobody can see a
+ * window, so nobody can place a call.
+ *
+ * The chain does not have that problem. Given ids from somewhere else (our own
+ * projection), every fact that matters for trading can be read directly, and
+ * `getMarketOnchain` answers in ~1-2s.
+ *
+ * This does NOT weaken the source-of-truth rule. Status, pool and expiry come
+ * from the chain here exactly as they do on the fast path; the candidate list
+ * only decides which markets to LOOK at. A stale id costs one wasted read, and
+ * a window that has since closed is reported closed, because the chain says so.
+ */
+export async function getWindowsFromCandidates(
+  client: DexClient,
+  candidates: readonly WindowCandidate[],
+  opts: { includeUntradable?: boolean } = {},
+): Promise<Window[]> {
+  await client.clock.ensureFresh();
+
+  const settled = await Promise.all(
+    candidates.map(async (c) => {
+      try {
+        // Deliberately NOT through `client.queue`. Its retry-with-backoff is
+        // right for the fast path, but here the candidate list comes from a
+        // projection that may name markets which no longer exist — and every
+        // one of those was retried, turning twelve reads into twenty-one
+        // seconds. This is a fallback running against a deadline: a candidate
+        // that does not answer promptly is skipped, not chased.
+        const onchain = await withTimeout(
+          client.exchange.client.getMarketOnchain(c.marketId),
+          CANDIDATE_READ_TIMEOUT_MS,
+        );
+        return { c, onchain };
+      } catch {
+        // A window we cannot read on-chain is a window we must not trade.
+        return null;
+      }
+    }),
+  );
+
+  const windows: Window[] = [];
+  for (const entry of settled) {
+    if (!entry) continue;
+    const { c, onchain } = entry;
+
+    // Expiry from the CHAIN, not from the candidate: a projection can lag, and
+    // the countdown is the one number a player acts on.
+    const closesAtSec = Number(onchain.expiry);
+    const secondsLeft = client.clock.secondsUntil(closesAtSec);
+    const intervalSec = c.intervalSec ?? null;
+    const isTradable =
+      onchain.status === MarketStatus.Trading &&
+      secondsLeft >= headroomSecFor(intervalSec ?? 0);
+
+    if (!isTradable && !opts.includeUntradable) continue;
+
+    windows.push({
+      marketId: c.marketId,
+      asset: c.asset,
+      pool: onchain.pool,
+      venueId: c.venueId ?? null,
+      // The venue's own question text has changed format three times in a week
+      // (docs/dex-notes.md), so it was never load-bearing. Stating the series
+      // plainly is more useful than echoing a string we cannot rely on.
+      question: c.question ?? `Will ${c.asset} close at or above its opening price?`,
+      strike: c.strike ?? "0",
+      intervalSec,
+      opensAtSec: c.opensAtSec ?? closesAtSec - (intervalSec ?? 0),
+      closesAtSec,
+      secondsLeft,
+      status: onchain.status,
+      isTradable,
+      onchain,
+      // No indexer row exists on this path. Callers use the typed fields above;
+      // `raw` is only ever read by code that already has an indexer row.
+      raw: undefined as unknown as BinaryMarket,
+    });
+  }
+
+  windows.sort((a, b) => a.closesAtSec - b.closesAtSec);
+  return windows;
+}
+
 export interface GetWindowsOptions {
   asset?: string;
   intervalSec?: number;
