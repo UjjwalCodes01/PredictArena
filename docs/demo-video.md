@@ -25,6 +25,14 @@ pnpm doctor        # chain + collateral identity
 - [ ] Have a wallet that already has **≥5 settled calls**, so Brier and Edge
       show real numbers instead of dashes. This matters: the dash is correct
       behaviour but it is not what you want on screen while narrating skill.
+- [ ] **Run the real indexer for the whole session:** `pnpm dev:indexer` in a
+      terminal you leave alone. The deployed site keeps itself fresh off page
+      views, which is fine day to day — but while recording you want
+      settlements landing in seconds, not on the next poke. Kill it after.
+- [ ] **Rehearse the core flow once with the AI switched off** (unset
+      `AI_PRIVATE_KEY` locally). Connect → call → settle → leaderboard must
+      stand on its own; the forecaster is a bonus on top, not a leg it rests
+      on. If anything wobbles without the AI, that is the thing to fix first.
 
 **Record the settlement separately.** A window takes five minutes to resolve and
 the video is two and a half. Place a call, let it settle off-camera, and cut to

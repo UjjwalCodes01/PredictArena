@@ -179,6 +179,63 @@ async function main(): Promise<void> {
       });
     }
 
+    // ---- 5b. Projection ------------------------------------------------------
+    // The DEX round-trip above proves the venue works; this proves OUR pipeline
+    // agrees with it. One ingest pass over the window we just traded, then the
+    // projection must contain this exact call — same tx, same direction. Runs
+    // only when a database is configured, and failing it fails the smoke: a
+    // projection that silently disagrees with the chain is precisely the bug
+    // this script exists to catch before a judge does.
+    if (process.env["DATABASE_URL"]) {
+      heading("5b. Projection agrees with the chain");
+      const { createDb, getWalletCalls, normalizeAddress } = await import("@predictarena/db");
+      const { ingestWindows, ingestCalls } = await import("@predictarena/indexer");
+      const db = createDb(process.env["DATABASE_URL"]);
+
+      // The venue's fill index can lag the tx by a few seconds, and a
+      // serverless database can drop the first connection after idling — both
+      // deserve the same patience. Only a genuine disagreement fails fast.
+      let row = null;
+      let lastError: unknown = null;
+      for (let attempt = 1; attempt <= 3 && !row; attempt += 1) {
+        try {
+          const w = await ingestWindows(client, db, [asset]);
+          const ours = w.windows.filter((x) => x.marketId === chosen.marketId);
+          if (ours.length > 0) await ingestCalls(client, db, ours);
+          const mine = await getWalletCalls(db, normalizeAddress(account.address), 50);
+          row = mine.find((c) => c.txHash.toLowerCase() === placed.txHash.toLowerCase()) ?? null;
+          lastError = null;
+        } catch (e) {
+          lastError = e;
+          // Drizzle wraps the driver's error; the wrapper's message is the SQL
+          // text, which buries the actual reason. Prefer the cause.
+          const cause = e instanceof Error && e.cause instanceof Error ? e.cause.message : null;
+          const msg = cause ?? (e instanceof Error ? e.message : "error");
+          info(`projection attempt ${attempt} failed: ${msg.slice(0, 100)}`);
+        }
+        if (!row && attempt < 3) await new Promise((r) => setTimeout(r, 5_000));
+      }
+
+      if (!row && lastError) {
+        throw new DexError("API_DOWN", "Could not reach the database to verify the projection.", {
+          action: "The DEX round-trip itself succeeded. Fix connectivity and re-run to verify the projection.",
+        });
+      }
+      if (!row) {
+        throw new DexError("API_DOWN", "The projection never picked up the call just placed.", {
+          action: "The chain has the fill; ingestion does not. Debug ingest-calls before trusting the leaderboard.",
+        });
+      }
+      if (row.direction !== direction) {
+        throw new DexError("API_DOWN",
+          `Projection direction ${row.direction} disagrees with the ${direction} call just placed.`);
+      }
+      kv("projected", `${row.direction} ${formatFixed(BigInt(row.stake), d, 4)} ${client.collateral.symbol} (${row.status})`);
+      console.log(`  ${green("✔")} projection matches the chain`);
+    } else {
+      info("DATABASE_URL not set — skipping the projection check.");
+    }
+
     // ---- 6. Settlement -------------------------------------------------------
     heading("6. Settlement");
     console.log(dim("  Polling the chain \u2014 polling is the guarantee, the live feed is an optimisation."));

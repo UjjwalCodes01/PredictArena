@@ -302,6 +302,9 @@ credible.
   early call is permanently unrecoverable for this reason.
 - **Rate limiting is per-instance and in-memory.** Measured: 40 parallel requests,
   0 limited. It catches one client hammering one instance and nothing concurrent.
+  The gates that *spend* are the exception: the AI forecaster and the ingestion
+  cycle each claim an atomic database lease before working, so those are
+  throttled globally no matter how many instances traffic is spread across.
 - **Testnet only, by design.** No mainnet, no real funds, no KYC.
 - **The AI forecaster is not expected to print money.** Short-horizon crypto
   direction is close to a coin flip, and the system prompt tells the model so.

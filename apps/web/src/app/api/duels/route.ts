@@ -2,34 +2,20 @@ import { NextResponse } from "next/server";
 import { verifyMessage } from "viem";
 import {
   createDuel, getDuelsForWallet, getCallsForDuels, resolveDuel, tallyDuels, contestKey,
-  DuelError, normalizeAddress, type DuelOutcome,
+  DuelError, type DuelOutcome,
 } from "@predictarena/db";
 import { serverDb, serverDex, dbRead, withDeadline } from "@/lib/server";
 import { getWindow } from "@predictarena/dex";
 import { weekIdForClose } from "@predictarena/db";
 import { rateLimit, clientKey, tooManyRequests } from "@/lib/rateLimit";
+import { challengeMessage, signatureStaleness } from "@/lib/signedMessage";
 
 export const dynamic = "force-dynamic";
 
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 
-/**
- * The text a challenger signs.
- *
- * Names both wallets and the window, so a signature cannot be replayed to
- * challenge someone else or move the duel to a different market. Both sides
- * build this from the same function so they cannot drift.
- */
-export function challengeMessage(challenger: string, opponent: string, windowId: string): string {
-  return [
-    "Prediction Leagues",
-    "",
-    `Challenge ${normalizeAddress(opponent)} on window ${windowId}.`,
-    `Issued by ${normalizeAddress(challenger)}.`,
-    "",
-    "This is a signature, not a transaction. It costs nothing and moves nothing.",
-  ].join("\n");
-}
+// The signed text and its freshness rule live in ONE shared module — see
+// `@/lib/signedMessage` for why both halves must come from the same place.
 
 /**
  * Duels for one wallet, resolved.
@@ -150,14 +136,16 @@ export async function POST(request: Request): Promise<NextResponse> {
   const limit = rateLimit(`duel:${clientKey(request)}`, { capacity: 10, refillPerSec: 0.2 });
   if (!limit.ok) return tooManyRequests(limit) as never;
 
-  let body: { challenger?: string; opponent?: string; windowId?: string; signature?: string };
+  let body: {
+    challenger?: string; opponent?: string; windowId?: string; signature?: string; issuedAt?: string;
+  };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ code: "BAD_REQUEST", message: "Expected JSON." }, { status: 400 });
   }
 
-  const { challenger, opponent, windowId, signature } = body;
+  const { challenger, opponent, windowId, signature, issuedAt } = body;
   if (
     !challenger || !ADDRESS.test(challenger) ||
     !opponent || !ADDRESS.test(opponent) ||
@@ -170,11 +158,22 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
+  // Before the signature check, so a stale timestamp names its actual cause.
+  const stale = signatureStaleness(issuedAt);
+  if (stale) {
+    return NextResponse.json(
+      { code: "SIGNATURE_EXPIRED", message: stale, action: "Sign the challenge again." },
+      { status: 401 },
+    );
+  }
+
   let valid = false;
   try {
     valid = await verifyMessage({
       address: challenger as `0x${string}`,
-      message: challengeMessage(challenger, opponent, windowId),
+      // Timestamp included: a signature must not be refreshable by re-posting
+      // it with a newer issuedAt.
+      message: challengeMessage(challenger, opponent, windowId, issuedAt as string),
       signature: signature as `0x${string}`,
     });
   } catch {

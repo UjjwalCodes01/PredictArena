@@ -15,7 +15,7 @@ export {
 
 export {
   upsertWindow, upsertCall, markWindowSettled, settleCallsForWindow, getNonTerminalCalls, getOverdueCalls,
-  getOpenWindows, touchWallet, getSyncState, setSyncState, getScorableCalls,
+  getOpenWindows, touchWallet, getSyncState, setSyncState, acquireLease, getScorableCalls,
   getStandings, getWalletCalls, getWindowsByIds, getRecentCalls, getLeagueTotals,
   getRecentlyClosedWindows,
   upsertCalls, upsertWindows, touchWallets,

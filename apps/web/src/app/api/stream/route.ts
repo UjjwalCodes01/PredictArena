@@ -1,5 +1,6 @@
 import { getWalletCalls, normalizeAddress } from "@predictarena/db";
 import { serverDb } from "@/lib/server";
+import { rateLimit, clientKey, tooManyRequests } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
 // A stream must not be buffered by the framework or any proxy in front of it.
@@ -8,7 +9,22 @@ export const fetchCache = "force-no-store";
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 
 /** How often the server looks for a change. The CLIENT never polls. */
-const CHECK_MS = 3_000;
+const CHECK_MS = 5_000;
+
+/**
+ * Streams this instance will hold open at once.
+ *
+ * Each open stream polls the database every CHECK_MS for its whole lifetime,
+ * so unlike an ordinary endpoint the cost of a request continues after the
+ * response starts. Without a cap, one caller opening streams for arbitrary
+ * public wallets multiplies database load for minutes per request. The cap is
+ * per-instance (module state is all a serverless function has), which still
+ * bounds the damage each instance can do; the legitimate case is one stream
+ * per open tab, so an honest instance sits far below it. Refused connections
+ * get 429, and the client's slow fallback poll still covers settlement.
+ */
+const MAX_STREAMS = 12;
+let openStreams = 0;
 /**
  * Serverless platforms cap a function's wall time. Closing cleanly a little
  * before that cap means the browser reconnects on our terms rather than seeing
@@ -35,6 +51,12 @@ const HEARTBEAT_MS = 20_000;
  * still lands -- just later.
  */
 export async function GET(request: Request): Promise<Response> {
+  // Opening a stream is the expensive act — it commits this instance to
+  // minutes of database polling — so creation is what gets rate-limited.
+  // ~1 new stream per 20s per client, with a small burst for reconnects.
+  const limit = rateLimit(`stream:${clientKey(request)}`, { capacity: 3, refillPerSec: 0.05 });
+  if (!limit.ok) return tooManyRequests(limit) as never;
+
   const { searchParams } = new URL(request.url);
   const wallet = searchParams.get("wallet");
 
@@ -43,10 +65,28 @@ export async function GET(request: Request): Promise<Response> {
   }
   const address = normalizeAddress(wallet);
 
+  if (openStreams >= MAX_STREAMS) {
+    return new Response("Too many live streams open; falling back to polling.", {
+      status: 429,
+      headers: { "retry-after": "30" },
+    });
+  }
+
   const encoder = new TextEncoder();
   let timer: ReturnType<typeof setInterval> | undefined;
   let heartbeat: ReturnType<typeof setInterval> | undefined;
   let lifetime: ReturnType<typeof setTimeout> | undefined;
+
+  // Counted from before the stream starts until whichever close path runs
+  // first; the flag keeps the two paths (shutdown and cancel) from
+  // double-decrementing.
+  openStreams += 1;
+  let released = false;
+  const release = (): void => {
+    if (released) return;
+    released = true;
+    openStreams = Math.max(0, openStreams - 1);
+  };
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -63,6 +103,7 @@ export async function GET(request: Request): Promise<Response> {
       const shutdown = (): void => {
         if (closed) return;
         closed = true;
+        release();
         if (timer) clearInterval(timer);
         if (heartbeat) clearInterval(heartbeat);
         if (lifetime) clearTimeout(lifetime);
@@ -127,6 +168,7 @@ export async function GET(request: Request): Promise<Response> {
       request.signal.addEventListener("abort", shutdown);
     },
     cancel() {
+      release();
       if (timer) clearInterval(timer);
       if (heartbeat) clearInterval(heartbeat);
       if (lifetime) clearTimeout(lifetime);

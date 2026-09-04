@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { getSyncState, setSyncState } from "@predictarena/db";
+import { getSyncState, acquireLease } from "@predictarena/db";
 import { runAgent, isConfigured } from "@predictarena/ai";
 import { parseAmount } from "@predictarena/dex";
-import { serverDb, aiDex, dbRead, withDeadline } from "@/lib/server";
+import { serverDb, aiDex, dbRead, withDeadline, ensureLiveNetwork } from "@/lib/server";
 import { rateLimit, clientKey, tooManyRequests } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
@@ -57,20 +57,42 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   const db = serverDb();
 
-  // Global gate. If this read fails we do NOT run: without it there is no
-  // throttle at all, and an unthrottled spender is worse than a stale one.
-  let sinceMs: number;
+  /*
+   * ONE atomic statement claims the slot, and claiming IS the throttle.
+   *
+   * The earlier version read the last-run time and then wrote its own — and
+   * between that read and write, a second instance could do the same, so two
+   * concurrent page views made the forecaster spend twice: model tokens and
+   * testnet collateral, doubled by nothing but load-balancer routing. The
+   * lease's INSERT … ON CONFLICT DO UPDATE … WHERE expired runs under a row
+   * lock, so of N simultaneous callers exactly one gets the slot.
+   *
+   * Claimed BEFORE working, same as before: a run that crashes holds the gate
+   * shut for the full gap rather than retrying on every page view. If the
+   * claim itself fails, we do NOT run — an unthrottled spender is worse than
+   * a stale one.
+   */
+  let claimed: boolean;
   try {
-    const row = await dbRead(() => getSyncState(db, LAST_RUN_KEY));
-    const cursor = (row as { cursor?: string } | null)?.cursor;
-    sinceMs = cursor ? Date.now() - new Date(cursor).getTime() : Number.MAX_SAFE_INTEGER;
+    claimed = await acquireLease(db, LAST_RUN_KEY, MIN_GAP_MS);
   } catch {
-    return NextResponse.json({ ran: false, reason: "gate unreadable" }, { status: 503 });
+    return NextResponse.json({ ran: false, reason: "gate unreachable" }, { status: 503 });
   }
 
-  if (sinceMs < MIN_GAP_MS) {
+  if (!claimed) {
+    let nextInSec: number | undefined;
+    try {
+      const row = await dbRead(() => getSyncState(db, LAST_RUN_KEY));
+      const cursor = (row as { cursor?: string } | null)?.cursor;
+      if (cursor) {
+        const sinceMs = Date.now() - new Date(cursor).getTime();
+        nextInSec = Math.max(0, Math.ceil((MIN_GAP_MS - sinceMs) / 1000));
+      }
+    } catch {
+      // Purely informational; the denial stands either way.
+    }
     return NextResponse.json(
-      { ran: false, reason: "throttled", nextInSec: Math.ceil((MIN_GAP_MS - sinceMs) / 1000) },
+      { ran: false, reason: "throttled", ...(nextInSec !== undefined ? { nextInSec } : {}) },
       { headers: { "cache-control": "no-store" } },
     );
   }
@@ -78,16 +100,13 @@ export async function GET(request: Request): Promise<NextResponse> {
   runningSince = Date.now();
   const started = Date.now();
 
-  // Claim the slot BEFORE working. A run that crashes must still hold the gate
-  // shut, otherwise a failing forecaster retries on every single page view.
   try {
-    await setSyncState(db, LAST_RUN_KEY, { cursor: new Date().toISOString() });
-  } catch {
-    runningSince = 0;
-    return NextResponse.json({ ran: false, reason: "gate unwritable" }, { status: 503 });
-  }
+    // This is the one server-side path that SPENDS, so it does not get the
+    // read path's leniency: chain id and collateral identity must be verified
+    // before an order can be built. Cached after the first success, so the
+    // cost is three RPC reads once per process, not per run.
+    await ensureLiveNetwork(ai.dex);
 
-  try {
     const decimals = ai.dex.collateral.decimals;
     const stake = parseAmount(process.env["AI_STAKE_TUSDC"] ?? "1", decimals);
 

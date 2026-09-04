@@ -11,6 +11,9 @@
       ],
       "@predictarena/db": [
         "./packages/db/src/index.ts"
+      ],
+      "@predictarena/indexer": [
+        "./apps/indexer/src/index.ts"
       ]
     }
   },

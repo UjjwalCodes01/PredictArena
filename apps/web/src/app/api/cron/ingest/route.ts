@@ -38,13 +38,21 @@ export async function GET(request: Request): Promise<NextResponse> {
     );
   }
 
-  // Vercel Cron sends the secret as a bearer token; other schedulers can use
-  // the query parameter.
+  // Bearer header ONLY. There used to be a `?key=` fallback for schedulers
+  // that cannot set headers, but a secret in the URL is a secret in access
+  // logs, proxy logs, and anything that records the request line — and both
+  // real callers (Vercel Cron, the GitHub workflow) already send the header.
   const auth = request.headers.get("authorization");
-  const { searchParams } = new URL(request.url);
-  const provided = auth?.replace(/^Bearer\s+/i, "") ?? searchParams.get("key");
+  const provided = auth?.replace(/^Bearer\s+/i, "");
   if (provided !== secret) {
-    return NextResponse.json({ code: "UNAUTHORIZED", message: "Bad or missing key." }, { status: 401 });
+    return NextResponse.json(
+      {
+        code: "UNAUTHORIZED",
+        message: "Bad or missing key.",
+        action: "Send the secret as `Authorization: Bearer <CRON_SECRET>`; query parameters are not accepted.",
+      },
+      { status: 401 },
+    );
   }
 
   const started = Date.now();

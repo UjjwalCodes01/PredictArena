@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSyncState, setSyncState } from "@predictarena/db";
+import { getSyncState, setSyncState, acquireLease } from "@predictarena/db";
 import { ingestWindows, ingestCalls, catchUpClosedWindows, reconcile } from "@predictarena/indexer";
 import { serverDb, serverDex, dbRead, withDeadline } from "@/lib/server";
 import { rateLimit, clientKey, tooManyRequests } from "@/lib/rateLimit";
@@ -95,6 +95,23 @@ export async function GET(request: Request): Promise<NextResponse> {
       { ran: false, reason: lockHeld ? "already running" : "just ran" },
       { headers: { "cache-control": "no-store" } },
     );
+  }
+
+  // The module guards above are only a fast path: each serverless instance
+  // carries its own copy, so under horizontal scale two instances could both
+  // pass them and run the same leg concurrently. The work is idempotent, so
+  // that was waste rather than corruption — but chain reads and an ocean-away
+  // database make the waste real. This claim is one atomic statement shared by
+  // every instance; whoever loses it simply reports that someone else is on it.
+  try {
+    if (!(await acquireLease(db, "tick:lease", MIN_GAP_MS))) {
+      return NextResponse.json(
+        { ran: false, reason: "another instance is on it" },
+        { headers: { "cache-control": "no-store" } },
+      );
+    }
+  } catch {
+    return NextResponse.json({ ran: false, reason: "database unreachable" }, { status: 503 });
   }
 
   runningSince = Date.now();

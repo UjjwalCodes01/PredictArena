@@ -13,8 +13,28 @@ import { createDb, type Database } from "@predictarena/db";
 import { privateKeyToAccount } from "viem/accounts";
 
 let dexSingleton: DexClient | null = null;
-let verified: Promise<unknown> | null = null;
 let dbSingleton: Database | null = null;
+
+/**
+ * Chain-and-collateral verification, once per client per process.
+ *
+ * `assertLiveNetwork` confirms the RPC really is Shannon and the collateral
+ * really is the token we think it is — three RPC reads. Success is cached for
+ * the client's lifetime; failure is NOT, so the next caller retries instead of
+ * inheriting a broken verdict forever.
+ */
+const liveNetworkChecks = new WeakMap<DexClient, Promise<unknown>>();
+export function ensureLiveNetwork(client: DexClient): Promise<unknown> {
+  let check = liveNetworkChecks.get(client);
+  if (!check) {
+    check = assertLiveNetwork(client).catch((e: unknown) => {
+      liveNetworkChecks.delete(client);
+      throw e;
+    });
+    liveNetworkChecks.set(client, check);
+  }
+  return check;
+}
 
 export function serverDex(): DexClient {
   dexSingleton ??= createDexClient({
@@ -22,9 +42,12 @@ export function serverDex(): DexClient {
     rpcHttpUrl: process.env["RPC_HTTP_URL"] ?? "https://dream-rpc.somnia.network",
     rpcWsUrl: process.env["RPC_WS_URL"] ?? "wss://dream-rpc.somnia.network/ws",
   });
-  // Assert chain and collateral identity once per process, not per request.
-  verified ??= assertLiveNetwork(dexSingleton).catch(() => {
-    verified = null; // let the next request retry rather than caching a failure
+  // Kicked off eagerly but not awaited: this client only READS (windows,
+  // books, settlements), and every read is checked against chain data anyway.
+  // The path that SPENDS — the AI forecaster — awaits ensureLiveNetwork()
+  // before its first order instead.
+  void ensureLiveNetwork(dexSingleton).catch(() => {
+    /* logged by the eventual awaiter; reads proceed regardless */
   });
   return dexSingleton;
 }

@@ -5,35 +5,14 @@ import {
 } from "@predictarena/db";
 import { serverDb, dbRead } from "@/lib/server";
 import { rateLimit, clientKey, tooManyRequests } from "@/lib/rateLimit";
+import { profileMessage, signatureStaleness } from "@/lib/signedMessage";
 
 export const dynamic = "force-dynamic";
 
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 
-/**
- * The exact text a player signs to update their profile.
- *
- * It contains the address AND every field being written, so a signature is
- * bound to specific content. Signing "name: alice" cannot be replayed to set a
- * different name or to slip in a website the signer never saw.
- *
- * Both sides build this string from the same function, so they cannot drift.
- */
-export function profileMessage(address: string, p: ProfileInput): string {
-  const lines = [
-    "Prediction Leagues",
-    "",
-    `Update the profile for ${normalizeAddress(address)}.`,
-    "",
-    `name: ${p.displayName ?? ""}`,
-    `bio: ${p.bio ?? ""}`,
-    `x: ${p.twitter ?? ""}`,
-    `web: ${p.website ?? ""}`,
-    "",
-    "This is a signature, not a transaction. It costs nothing and moves nothing.",
-  ];
-  return lines.join("\n");
-}
+// The signed text and its freshness rule live in ONE shared module — see
+// `@/lib/signedMessage` for why both halves must come from the same place.
 
 export async function GET(request: Request): Promise<NextResponse> {
   const limit = rateLimit(clientKey(request), { capacity: 20, refillPerSec: 1 });
@@ -75,18 +54,28 @@ export async function POST(request: Request): Promise<NextResponse> {
   const limit = rateLimit(clientKey(request), { capacity: 20, refillPerSec: 1 });
   if (!limit.ok) return tooManyRequests(limit) as never;
 
-  let body: { address?: string; profile?: ProfileInput; signature?: string };
+  let body: { address?: string; profile?: ProfileInput; signature?: string; issuedAt?: string };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ code: "BAD_REQUEST", message: "Expected JSON." }, { status: 400 });
   }
 
-  const { address, profile, signature } = body;
+  const { address, profile, signature, issuedAt } = body;
   if (!address || !ADDRESS.test(address) || !profile || !signature) {
     return NextResponse.json(
       { code: "BAD_REQUEST", message: "address, profile and signature are all required." },
       { status: 400 },
+    );
+  }
+
+  // Checked BEFORE the signature: a stale timestamp means the signature will
+  // be refused no matter what, and this failure names its actual cause.
+  const stale = signatureStaleness(issuedAt);
+  if (stale) {
+    return NextResponse.json(
+      { code: "SIGNATURE_EXPIRED", message: stale, action: "Sign the update again." },
+      { status: 401 },
     );
   }
 
@@ -95,8 +84,9 @@ export async function POST(request: Request): Promise<NextResponse> {
     valid = await verifyMessage({
       address: address as `0x${string}`,
       // Rebuilt from what was SENT, so the signature covers exactly the values
-      // about to be stored.
-      message: profileMessage(address, profile),
+      // about to be stored — the timestamp included, or an attacker could
+      // refresh a captured signature by re-posting it with a newer issuedAt.
+      message: profileMessage(address, profile, issuedAt as string),
       signature: signature as `0x${string}`,
     });
   } catch {

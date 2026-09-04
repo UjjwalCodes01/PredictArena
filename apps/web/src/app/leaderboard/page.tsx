@@ -237,7 +237,9 @@ export default function LeaderboardPage() {
         {" "}
         <strong className="text-ink">Edge</strong> is the honest one: your win rate minus the price
         you paid. Anyone can win a coin flip — a positive edge means you are finding sides the
-        market has underpriced. Both it and accuracy appear after 5 settled calls.
+        market has underpriced. Both it and accuracy appear after 5 settled calls. The board scores
+        every wallet trading these markets, from public chain fills — taker buys only, so resting
+        market-maker bots are not ranked as forecasters.
       </p>
     </>
   );

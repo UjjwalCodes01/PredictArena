@@ -18,6 +18,7 @@ import type { ProfileDto } from "@/lib/types";
 import { Avatar } from "@/components/Avatar";
 import { CopyAddress } from "@/components/CopyAddress";
 import { Panel, Button, ErrorNote, Empty, Skeleton, Card } from "@/components/ui";
+import { profileMessage } from "@/lib/signedMessage";
 import { NetworkBanner } from "@/components/Wallet";
 
 const BIO_MAX = 160;
@@ -30,21 +31,6 @@ interface Draft {
   website: string;
 }
 
-/** Must match the server's `profileMessage` exactly, or the signature fails. */
-function profileMessage(address: string, p: Draft): string {
-  return [
-    "Prediction Leagues",
-    "",
-    `Update the profile for ${address.toLowerCase()}.`,
-    "",
-    `name: ${p.displayName || ""}`,
-    `bio: ${p.bio || ""}`,
-    `x: ${p.twitter || ""}`,
-    `web: ${p.website || ""}`,
-    "",
-    "This is a signature, not a transaction. It costs nothing and moves nothing.",
-  ].join("\n");
-}
 
 export default function SettingsPage() {
   const { address, isConnected } = useAccount();
@@ -102,11 +88,14 @@ export default function SettingsPage() {
     setError(null);
     setSaved(false);
     try {
-      const signature = await signMessageAsync({ message: profileMessage(address, draft) });
+      // The timestamp is inside the signed text, so the server can refuse a
+      // replayed signature without trusting anything sent beside it.
+      const issuedAt = new Date().toISOString();
+      const signature = await signMessageAsync({ message: profileMessage(address, draft, issuedAt) });
       const r = await fetch("/api/profile", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ address, profile: draft, signature }),
+        body: JSON.stringify({ address, profile: draft, signature, issuedAt }),
       });
       const body = await r.json();
       if (!r.ok) {

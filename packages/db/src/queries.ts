@@ -57,9 +57,20 @@ export async function upsertCalls(db: Database, rows: readonly NewCallRow[]): Pr
       .values([...chunk])
       .onConflictDoUpdate({
         target: [calls.txHash, calls.windowId, calls.direction],
+        // EVERY chain-derived column, not just the ones that "should" change.
+        // A replayed ingest is how corrections arrive: if the venue's fill data
+        // was wrong the first time — a stake amended, a timestamp corrected —
+        // the replay must be allowed to fix it, or the projection quietly keeps
+        // the error forever. weekId rides with placedAt because it is derived
+        // from it; leaving it behind would strand the call in the wrong week.
         set: {
           status: sql`excluded.status`,
+          wallet: sql`excluded.wallet`,
+          stake: sql`excluded.stake`,
           quantity: sql`excluded.quantity`,
+          placedAt: sql`excluded.placed_at`,
+          weekId: sql`excluded.week_id`,
+          asset: sql`excluded.asset`,
           settledAt: sql`excluded.settled_at`,
           payout: sql`excluded.payout`,
           redeemTxHash: sql`excluded.redeem_tx_hash`,
@@ -110,9 +121,16 @@ export async function upsertCall(db: Database, row: NewCallRow): Promise<void> {
     .values(row)
     .onConflictDoUpdate({
       target: [calls.txHash, calls.windowId, calls.direction],
+      // Same full chain-derived set as upsertCalls, for the same reason: a
+      // replay is how corrections arrive.
       set: {
         status: sql`excluded.status`,
+        wallet: sql`excluded.wallet`,
+        stake: sql`excluded.stake`,
         quantity: sql`excluded.quantity`,
+        placedAt: sql`excluded.placed_at`,
+        weekId: sql`excluded.week_id`,
+        asset: sql`excluded.asset`,
         settledAt: sql`excluded.settled_at`,
         payout: sql`excluded.payout`,
         redeemTxHash: sql`excluded.redeem_tx_hash`,
@@ -150,10 +168,29 @@ export async function settleCallsForWindow(
     : sql`CASE WHEN ${calls.direction} = ${winningOutcome === 0 ? "UP" : "DOWN"}
                 THEN 'WON'::call_status ELSE 'LOST'::call_status END`;
 
+  /*
+   * ALL calls on the window, not only PENDING ones.
+   *
+   * The earlier version filtered on PENDING, which made every settlement
+   * permanent the moment it was written: a window voided after resolving, or
+   * an outcome corrected upstream, could never reach rows already marked
+   * WON or LOST — contradicting the rule that the chain is the truth and a
+   * correction is a recompute, not a repair.
+   *
+   * So the filter is now "disagrees with the chain": rows already correct are
+   * untouched (keeping the write idempotent and the returned count honest),
+   * and rows that disagree are corrected no matter what they said before.
+   * FAILED stays excluded — it is reserved for placements that never became a
+   * chain fill, which no settlement can retroactively make real.
+   */
   const updated = await db
     .update(calls)
     .set({ status, settledAt, updatedAt: new Date() })
-    .where(and(eq(calls.windowId, windowId), eq(calls.status, "PENDING")))
+    .where(and(
+      eq(calls.windowId, windowId),
+      ne(calls.status, "FAILED"),
+      sql`${calls.status} IS DISTINCT FROM (${status})`,
+    ))
     .returning({ id: calls.id });
 
   return updated.length;
@@ -686,6 +723,39 @@ export async function getCallsForDuels(
 export async function getSyncState(db: Database, key: string) {
   const [row] = await db.select().from(syncState).where(eq(syncState.key, key)).limit(1);
   return row ?? null;
+}
+
+/**
+ * Claim a named slot for `ttlMs`, atomically across every instance.
+ *
+ * The serverless deployment runs many instances, and a check-then-write gate
+ * ("read the last-run time, then write ours") has a window between the read
+ * and the write in which two instances both see "stale" and both proceed. For
+ * `/api/tick` that means duplicate work; for the AI forecaster it means
+ * spending twice — model tokens and testnet collateral.
+ *
+ * So the claim is ONE statement: insert the row, or update it only where the
+ * existing claim has aged past the TTL. Postgres takes a row lock on the
+ * conflicting row, so exactly one concurrent caller's condition evaluates
+ * true. `RETURNING` tells us whether we were that caller — no rows means
+ * someone else holds the lease.
+ *
+ * There is deliberately no release. A holder that crashes must not wedge the
+ * system, so the lease simply expires; TTL doubles as both the throttle
+ * interval and the crash recovery bound.
+ */
+export async function acquireLease(db: Database, key: string, ttlMs: number): Promise<boolean> {
+  const now = new Date();
+  const rows = await db
+    .insert(syncState)
+    .values({ key, cursor: now.toISOString(), updatedAt: now })
+    .onConflictDoUpdate({
+      target: syncState.key,
+      set: { cursor: now.toISOString(), updatedAt: now },
+      setWhere: lt(syncState.updatedAt, new Date(now.getTime() - ttlMs)),
+    })
+    .returning({ key: syncState.key });
+  return rows.length > 0;
 }
 
 export async function setSyncState(

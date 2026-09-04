@@ -32,7 +32,9 @@
   },
   "dependencies": {
     "@predictarena/ai": "workspace:*",
+    "@predictarena/db": "workspace:*",
     "@predictarena/dex": "workspace:*",
+    "@predictarena/indexer": "workspace:*",
     "@somnia-chain/markets-sdk": "^0.28.1",
     "dotenv": "^17.2.3",
     "viem": "^2.40.0"

@@ -26,7 +26,25 @@
       "Bash(git rm *)",
       "Bash(timeout 120 pnpm gate)",
       "Bash(timeout 90 pnpm db:check)",
-      "Bash(curl -s --max-time 45 https://predictarena-gamma.vercel.app/api/health)"
+      "Bash(curl -s --max-time 45 https://predictarena-gamma.vercel.app/api/health)",
+      "Bash(cd /home/ujwal/Desktop/coding/PredictArena *)",
+      "Bash(node -e \"const {PgDialect}=require\\('drizzle-orm/pg-core'\\); const {sql}=require\\('drizzle-orm'\\); const d=new PgDialect\\(\\); console.log\\(d.sqlToQuery\\(sql\\\\`x = \\\\${'PENDING'}\\\\`\\)\\)\")",
+      "Bash(node --input-type=module -e ' *)",
+      "Bash(pnpm tsx -e ' *)",
+      "Bash(pnpm tsx *)",
+      "Bash(npx tsc *)",
+      "Read(//home/ujwal/Desktop/coding/PredictArena/**)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\({dep:p.dependencies, dev:Object.keys\\(p.devDependencies||{}\\)}\\)\\)\")",
+      "Bash(pnpm install *)",
+      "Bash(timeout 580 pnpm smoke)",
+      "Bash(timeout 2 curl -s -o /dev/null -w \"%{http_code} \" \"http://localhost:3000/api/stream?wallet=0x7B89B524045dAa2626eE68cF8d2DAbD74b725872\")",
+      "Bash(curl -s --max-time 65 \"http://localhost:3000/api/ai/run\")",
+      "Bash(grep -rn '?key=\\\\|key=$CRON\\\\|query param' docs/ README.md .env.example)",
+      "Bash(curl -s --max-time 30 \"https://predictarena-gamma.vercel.app/api/positions?wallet=0xf06243d774F3872F974F3d01da55C2E050F2B542\")",
+      "Bash(echo \"exit: $?\")"
+    ],
+    "additionalDirectories": [
+      "/home/ujwal/Desktop/coding/PredictArena/packages/db/src"
     ]
   }
 }

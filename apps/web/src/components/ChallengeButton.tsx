@@ -13,18 +13,8 @@ import { useAccount, useSignMessage } from "wagmi";
 import { useQuery } from "@tanstack/react-query";
 import type { WindowsResponse } from "@/lib/types";
 import { shortAddress, seriesLabel } from "@/lib/format";
+import { challengeMessage } from "@/lib/signedMessage";
 import { Button, ErrorNote } from "./ui";
-
-function challengeMessage(challenger: string, opponent: string, windowId: string): string {
-  return [
-    "Prediction Leagues",
-    "",
-    `Challenge ${opponent.toLowerCase()} on window ${windowId}.`,
-    `Issued by ${challenger.toLowerCase()}.`,
-    "",
-    "This is a signature, not a transaction. It costs nothing and moves nothing.",
-  ].join("\n");
-}
 
 export function ChallengeButton({ opponent }: { opponent: string }) {
   const { address, isConnected } = useAccount();
@@ -60,13 +50,16 @@ export function ChallengeButton({ opponent }: { opponent: string }) {
     setBusy(true);
     setError(null);
     try {
+      // The timestamp is inside the signed text, so the server can refuse a
+      // replayed signature without trusting anything sent beside it.
+      const issuedAt = new Date().toISOString();
       const signature = await signMessageAsync({
-        message: challengeMessage(address, opponent, windowId),
+        message: challengeMessage(address, opponent, windowId, issuedAt),
       });
       const r = await fetch("/api/duels", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ challenger: address, opponent, windowId, signature }),
+        body: JSON.stringify({ challenger: address, opponent, windowId, signature, issuedAt }),
       });
       const body = await r.json();
       if (!r.ok) {
