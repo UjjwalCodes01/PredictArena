@@ -49,7 +49,22 @@
       "Bash(awk '/^function PlaceAction/,/^\\\\}/' apps/web/src/components/CallPanel.tsx)",
       "Bash(curl -s --max-time 40 \"https://predictarena-gamma.vercel.app/api/ai\")",
       "Bash(curl -s --max-time 40 \"https://predictarena-gamma.vercel.app/api/standings\")",
-      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(' ', d['status'], '|', ', '.join\\(f\\\\\"{k}:{v['status']}\\\\\" for k,v in d['checks'].items\\(\\)\\)\\)\")"
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(' ', d['status'], '|', ', '.join\\(f\\\\\"{k}:{v['status']}\\\\\" for k,v in d['checks'].items\\(\\)\\)\\)\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} in %{time_total}s\\\\n\" --max-time 20 \"https://streaktrader.sithunyein.com\")",
+      "Bash(curl -s --max-time 20 \"https://api.github.com/repos/thesithunyein/streaktrader\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('  ', d.get\\('full_name'\\), '| created:', d.get\\('created_at'\\), '| pushed:', d.get\\('pushed_at'\\), '| lang:', d.get\\('language'\\)\\)\")",
+      "Bash(curl -s --max-time 20 \"https://api.github.com/repos/thesithunyein/streaktrader/git/trees/main?recursive=1\")",
+      "Bash(python3 -c \"import json,sys; print\\(json.load\\(sys.stdin\\).get\\('default_branch'\\)\\)\")",
+      "Bash(curl -s --max-time 20 \"https://api.github.com/repos/thesithunyein/streaktrader/git/trees/master?recursive=1\")",
+      "Bash(curl -s --max-time 20 \"https://raw.githubusercontent.com/thesithunyein/streaktrader/master/contracts/StreakRegistry.sol\")",
+      "Bash(curl -s --max-time 20 \"https://raw.githubusercontent.com/thesithunyein/streaktrader/master/src/app/api/leaderboard/route.ts\")",
+      "Bash(curl -s --max-time 20 \"https://raw.githubusercontent.com/thesithunyein/streaktrader/master/src/app/api/streak/route.ts\")",
+      "Bash(curl -s --max-time 20 \"https://raw.githubusercontent.com/thesithunyein/streaktrader/master/src/hooks/useExchange.ts\")",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' --max-time 15 'https://streaktrader.sithunyein.com/deck.html')",
+      "Bash(echo \"deck:  $\\(curl -s -o /dev/null -w '%{http_code}' --max-time 15 'https://streaktrader.sithunyein.com/deck.html'\\)\")",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' --max-time 15 'https://www.youtube.com/oembed?url=https://youtu.be/QV84sYE5X_U&format=json')",
+      "Bash(echo \"video: $\\(curl -s -o /dev/null -w '%{http_code}' --max-time 15 'https://www.youtube.com/oembed?url=https://youtu.be/QV84sYE5X_U&format=json'\\)\")",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' --max-time 15 'https://streaktrader.sithunyein.com/app')"
     ],
     "additionalDirectories": [
       "/home/ujwal/Desktop/coding/PredictArena/packages/db/src"

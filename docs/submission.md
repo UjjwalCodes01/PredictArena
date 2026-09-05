@@ -30,9 +30,11 @@ us or not. This week: **1,344 ranked players**, ~59,000 calls indexed, scored
 by the same pure function with no exceptions. Place a trade through any app
 built on DreamDEX Event Contracts and you're already on our board.
 
-No local ledgers, no browser storage, nothing self-reported. A streak that
-lives in localStorage is a story; a streak derived from chain fills is a
-record.
+No local ledgers, no browser storage, no registry our own server writes to,
+nothing self-reported. A record the app asserts about itself — whether it
+lives in localStorage, a key-value store, or an owner-writable contract — is
+a story. A record derived from the venue's own fills is a record: we could
+not inflate it if we wanted to, and neither could you.
 
 ## Scored like forecasting is actually scored
 
@@ -103,8 +105,10 @@ derive from chain reads only.
 - **Generates real order flow** — every human call and every AI placement is
   a live IOC taker crossing the spread on the venue's own books.
 - **Compounds other builders' apps** — trades placed through *any* DreamDEX
-  surface land on our board. The more apps this hackathon produces, the more
-  our leaderboard matters.
+  surface land on our board. This hackathon itself is full of trading agents
+  and one-tap arcades; every order any of them places is already being scored
+  here. The more apps this ecosystem produces, the more the leaderboard
+  matters — we are the layer their activity accumulates into.
 - **Roadmap: copy-trading via session keys** — the board already answers "who
   is worth following"; scoped, revocable delegation is the mechanism that acts
   on it. Seasons/divisions, more series as the venue lists them.
