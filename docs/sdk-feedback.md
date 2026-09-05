@@ -189,5 +189,4 @@ read that directory.
 
 *Filed by the Prediction Leagues team. Full working notes, with verification
 status per claim, are in [`docs/dex-notes.md`](dex-notes.md); the residual
-questions we could not resolve are in
-[`docs/questions-for-telegram.md`](questions-for-telegram.md).*
+questions we could not resolve are collected in its §12.*

@@ -16,7 +16,7 @@ the board. Then find out the thing prediction markets never tell you:
 | **Venue** | DreamDEX Event Contracts — Up/Down binary markets on BTC and ETH |
 | **Collateral** | tUSDC (6dp), mintable in-app |
 | **Stack** | Next.js 16 · React 19 · wagmi/viem · Drizzle + Neon · pnpm workspace, TypeScript strict |
-| **Verification** | 377 tests · typecheck · 2 custom lint rules · bundle secret-scan, all in CI |
+| **Verification** | 414 tests · typecheck · 2 custom lint rules · bundle secret-scan, all in CI |
 | **Example settled tx** | [`0xc48d4941…`](https://shannon-explorer.somnia.network/tx/0xc48d49413de7ea0bde898c7bd5586c2885db52f133a2274a848fdc0e32f3fff8) |
 
 ### Sixty-second tour
@@ -58,8 +58,8 @@ shows a dash rather than a number nobody should trust.
 ### The leaderboard is not seeded
 
 It scores **every wallet trading these markets**, derived from public chain
-fills — not just people who signed up. As of writing: **1,210 wallets, 58,699
-calls, 1,647 windows, 996 ranked players** in the current week. You are ranked
+fills — not just people who signed up. As of writing: **over 1,300 ranked players** and ~59,000
+calls indexed in the current week alone. You are ranked
 against people who have no idea the league exists, which is a much harder test
 than a demo table of three seeded accounts.
 
@@ -135,7 +135,7 @@ Details: [docs/ai-forecaster.md](docs/ai-forecaster.md).
    reach the network directly.
 3. **No floats for money.** Amounts are `bigint` end to end; formatting happens
    only at display. Enforced by [`scripts/lint-no-float-money.ts`](scripts/lint-no-float-money.ts),
-   which fails CI — it scans 89 files.
+   which fails CI — it scans 92 files.
 4. **Testnet only.** Mainnet chain id, RPC and API are rejected at runtime and by
    [`scripts/lint-no-mainnet.ts`](scripts/lint-no-mainnet.ts).
 5. **Client input is untrusted.** Wins and losses are derived from chain reads
@@ -251,7 +251,7 @@ pnpm smoke       # LIVE round trip: quote → place → settle → redeem
 pnpm ai:probe    # forecaster dry run: calls the model, signs nothing
 ```
 
-Every change runs `pnpm typecheck && pnpm lint && pnpm test` (377 tests).
+Every change runs `pnpm typecheck && pnpm lint && pnpm test` (414 tests).
 
 ---
 
@@ -341,7 +341,7 @@ credible.
 | [docs/sdk-feedback.md](docs/sdk-feedback.md) | Integration feedback for the DreamDEX team |
 | [docs/ai-forecaster.md](docs/ai-forecaster.md) | How the AI player works, and how to run it |
 | [docs/cut-list.md](docs/cut-list.md) | What we deliberately did not build, and why |
-| [docs/phase4-hardening.md](docs/phase4-hardening.md) | Resilience drills and security sweep |
+| [docs/hardening.md](docs/hardening.md) | Resilience drills and security sweep |
 | [docs/demo-video.md](docs/demo-video.md) | Shot script for the demo |
 | [docs/deck.html](docs/deck.html) | Six-slide pitch deck (open in a browser) |
 

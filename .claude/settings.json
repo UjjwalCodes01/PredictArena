@@ -64,7 +64,9 @@
       "Bash(echo \"deck:  $\\(curl -s -o /dev/null -w '%{http_code}' --max-time 15 'https://streaktrader.sithunyein.com/deck.html'\\)\")",
       "Bash(curl -s -o /dev/null -w '%{http_code}' --max-time 15 'https://www.youtube.com/oembed?url=https://youtu.be/QV84sYE5X_U&format=json')",
       "Bash(echo \"video: $\\(curl -s -o /dev/null -w '%{http_code}' --max-time 15 'https://www.youtube.com/oembed?url=https://youtu.be/QV84sYE5X_U&format=json'\\)\")",
-      "Bash(curl -s -o /dev/null -w '%{http_code}' --max-time 15 'https://streaktrader.sithunyein.com/app')"
+      "Bash(curl -s -o /dev/null -w '%{http_code}' --max-time 15 'https://streaktrader.sithunyein.com/app')",
+      "Bash(sed 's|^| |')",
+      "Bash(curl -s --max-time 30 \"https://predictarena-gamma.vercel.app/api/ai\")"
     ],
     "additionalDirectories": [
       "/home/ujwal/Desktop/coding/PredictArena/packages/db/src"

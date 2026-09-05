@@ -1,10 +1,10 @@
 /**
  * Live updates, with reconciliation as the guarantee.
  *
- * PLAN.md specifies "WS with auto-reconnect (backoff 1s→30s) + resubscribe".
- * The transport differs from what that assumed — the spot WebSocket carries no
+ * The contract: WS with auto-reconnect (backoff 1s→30s) + resubscribe. The
+ * transport differs from what was first assumed — the spot WebSocket carries no
  * event-contract topics, so the live tail runs over the chain WS through the
- * SDK — but the contract is the one PLAN.md asked for, plus the thing AGENTS.md
+ * SDK — but the contract holds, plus the thing AGENTS.md
  * insists on: **polling is the guarantee, the tail is the optimisation.**
  *
  * A dropped socket must never silently stop settlements from being noticed, so
@@ -94,7 +94,7 @@ export function subscribe(client: DexClient, opts: SubscribeOptions): Subscripti
   };
 
   /**
-   * Exponential backoff with full jitter, 1s → 30s, matching PLAN.md. Full
+   * Exponential backoff with full jitter, 1s → 30s. Full
    * jitter so many clients recovering from one outage do not resynchronise.
    */
   const backoffFor = (n: number): number => {

@@ -1,7 +1,7 @@
 # docs/dex-notes.md — DreamDEX Event Contracts: verified ground truth
 
 Written per CLAUDE.md ("if docs contradict AGENTS.md assumptions, record what you found and say so
-explicitly") and PLAN.md Phase 0. **Verified live on 28 Aug 2026, ~17:26 UTC.**
+explicitly") during Phase 0 recon. **Verified live on 28 Aug 2026, ~17:26 UTC.**
 
 Two confidence levels are used throughout:
 - **[VERIFIED]** — I called the endpoint / read the chain / read the shipped package myself.
@@ -67,7 +67,7 @@ decimals() = 6
 present in the deployed bytecode), surfaced by the SDK as `trader.faucet({ amount })` and defaulting
 to 10,000 tUSDC. Any wallet holding STT for gas can mint its own stake.
 
-This matters for the demo: PLAN.md's risk register lists "testnet faucet dry / STT scarce" as a
+This matters for the demo: the build plan's risk register listed "testnet faucet dry / STT scarce" as a
 medium risk needing 4 hand-funded wallets. **That risk is effectively gone.** tUSDC is unlimited and
 self-minted; STT is externally gated but only once — the Telegram faucet grants 50 STT per 24h, and
 `pnpm faucet --fund-seeds` distributes it from DEV to the seed wallets. All four wallets were funded
@@ -134,12 +134,12 @@ Confirmed facts:
 6. `tickSize` / `lotSize` / `minQuantity` are **null on the indexer** — read them from chain with
    `getBinaryBookParams(pool)`.
 
-### VOID is common on testnet — this de-risks PLAN.md's void testing
+### VOID is common on testnet — this de-risks void testing
 
 **[VERIFIED]** Recent voided 60s windows for both BTC and ETH (expiries 1787931720/1787931780/
 1787931840, ~1.7h before the check), all `voidPolicy: 0`.
 
-PLAN.md's risk register lists "Void/edge outcomes unreproducible for testing — Medium". **Downgrade
+The risk register listed "Void/edge outcomes unreproducible for testing — Medium". **Downgrade
 it: voids are readily reproducible on the 60s series.** The flip side is that the demo can hit a
 void live, so the "Voided — stake returned" UI is demo-critical, not defensive polish.
 
@@ -260,7 +260,7 @@ The bot kit ships an entire Event Contract half our specs don't mention: `strate
 
 1. **Winnings are claimed, not received.** A settled market pays only when someone redeems. A user
    who wins and never claims sees a near-zero wallet. **This is a product decision our specs never
-   made** — see the open question in `docs/questions-for-telegram.md`.
+   made** — recorded as an open question in §12 below.
 2. **A reverted write does not throw.** SDK writes skip simulation and resolve even when the tx
    reverted; the receipt rides on `order.info`. Must check `receipt.status === "reverted"` explicitly
    or we will mark losing/failed orders as `PENDING` forever. Directly affects our `FAILED` handling.
@@ -344,9 +344,9 @@ key, and a private key committed anywhere outside `.env`.
 
 ---
 
-## 12. Open questions → `docs/questions-for-telegram.md`
+## 12. Open questions
 
-Recorded there rather than guessed, per CLAUDE.md. Phase 0 answered three of the original six:
+Recorded here rather than guessed, per CLAUDE.md. Phase 0 answered three of the original six:
 - **Q1 (indexer URL)** — `https://dev.smk.somnia.host/v1/graphql` confirmed working for Shannon.
   Still worth confirming it is the *intended* endpoint and stable through 8 Sep.
 - **Q3 (venueId)** — resolved: `listBinaryVenueIds()` discovers them; pin nothing.

@@ -1,8 +1,8 @@
 /**
  * `pnpm gate` — are the phase exit gates actually met?
  *
- * PLAN.md Phase 0: notes complete, one settled tx hash, four funded wallets.
- * PLAN.md Phase 1: `packages/dex` exists and `pnpm smoke` completes a live
+ * Phase 0: notes complete, one settled tx hash, four funded wallets.
+ * Phase 1: `packages/dex` exists and `pnpm smoke` completes a live
  * round-trip; CI green (typecheck + lint + tests).
  *
  * Checked against reality rather than memory, so "the phase is done" is a claim
@@ -22,7 +22,7 @@ const push = (r: CheckResult): CheckResult => (results.push(r), report(r), r);
 const ARTIFACT_PATH = resolve(REPO_ROOT, "artifacts", "phase0-probe.json");
 const NOTES_PATH = resolve(REPO_ROOT, "docs", "dex-notes.md");
 
-/** The Phase 0 questions PLAN.md requires dex-notes.md to answer. */
+/** The Phase 0 questions dex-notes.md must answer. */
 const REQUIRED_NOTES_TOPICS: Array<[string, RegExp]> = [
   ["how an order is placed", /createOrder|placeOrder|placeLimit/i],
   ["window schema / how windows are queried", /listLiveBinaryMarkets|window schema|intervalSec/i],
@@ -98,7 +98,7 @@ async function main(): Promise<void> {
 
   const collateral = dex.collateral.address;
   const d = dex.collateral.decimals;
-  // PLAN.md's gate says "four funded wallets", so all four are required. An
+  // The gate says "four funded wallets", so all four are required. An
   // earlier draft softened SEED1..3 to warnings; that was moving the goalpost
   // rather than meeting it. `pnpm faucet --fund-seeds` tops them up from DEV,
   // which sidesteps the external faucet's 24h cooldown.

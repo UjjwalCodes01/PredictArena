@@ -1,6 +1,6 @@
 /**
- * Scoring. Test-first per CLAUDE.md, table-driven, and every rule in
- * docs/phase2-design.md is pinned here so a decision cannot silently drift.
+ * Scoring. Test-first per CLAUDE.md, table-driven; every scoring rule is
+ * pinned here so a decision cannot silently drift.
  *
  * Points are DERIVED data: these tests are the specification, and the engine
  * must be recomputable and idempotent from raw calls alone.

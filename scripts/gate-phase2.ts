@@ -1,8 +1,8 @@
 /**
  * `pnpm gate:phase2` -- prove the Phase 2 exit gate.
  *
- * PLAN.md: "Kill the indexer mid-pending-call, restart it, and the call still
- * settles correctly via reconciliation."
+ * The exit gate: "Kill the indexer mid-pending-call, restart it, and the call
+ * still settles correctly via reconciliation."
  *
  * Timing a real SIGKILL makes a flaky test -- the indexer may simply have
  * finished the work before the signal lands. So this asserts the PROPERTY that

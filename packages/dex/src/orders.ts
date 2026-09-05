@@ -1,9 +1,9 @@
 /**
  * Placing a call.
  *
- * States and edge cases handled here are enumerated in docs/phase1-design.md;
- * every one is detected BEFORE a signature is requested, except the two that
- * are only knowable after submission (revert, and a fill of zero).
+ * Every state and edge case handled here is detected BEFORE a signature is
+ * requested, except the two only knowable after submission (a revert, and a
+ * fill of zero).
  *
  * Three behaviours exist because Phase 0 measured them, not from caution:
  *

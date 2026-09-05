@@ -25,7 +25,7 @@ decision that is not written down gets relitigated.
 | **Telegram share deep-link** | Phase 6 stretch. The share card covers it. |
 | **Sentry** | Wired an in-house `/api/client-error` + `ErrorReporter` instead. A third-party DSN in the client bundle for a testnet demo was not worth the dependency or the bundle weight. |
 | **Server-side refusal `fallbacks` for the AI** | A price-direction forecast has no meaningful refusal surface, a refusal already degrades to a safe pass, and an untested beta header in a demo hot path is the larger risk. It is also unsupported on Vertex AI, so wiring it would have had to be undone. |
-| **Auto-redeem on the user's behalf** | Winnings are claimed, not received. A silent sweep needs custody or a delegated path we could not confirm exists (`docs/questions-for-telegram.md` Q2). We show an explicit "Claim" button: one extra tap, and honest about what happened. |
+| **Auto-redeem on the user's behalf** | Winnings are claimed, not received. A silent sweep needs custody or a delegated path we could not confirm exists (an open question in `dex-notes.md` §12). We show an explicit "Claim" button: one extra tap, and honest about what happened. |
 | **Parsing the market question text** | Its format changed three times in a week. Treated as opaque display text; all semantics come from structured fields. |
 
 ## Deferred, not cut

@@ -6,14 +6,14 @@
  * refers to, and on any disagreement the chain wins and the row is corrected.
  * Nothing is ever "fixed" here by hand.
  *
- * Two deviations from PLAN.md's sketch, both deliberate:
+ * Two deliberate choices worth naming:
  *
  *  1. `stake` is `numeric(78,0)`, not a float or an int8. Amounts are bigint end
  *     to end (CLAUDE.md hard rule 3); numeric comes back from pg as a string, so
  *     a value can never silently become a float on the way out.
  *
  *  2. The uniqueness constraint is on `tx_hash`, NOT on (wallet, window_id).
- *     PLAN.md suggested the latter, but a wallet is genuinely allowed to place
+ *     The obvious key is the latter, but a wallet is genuinely allowed to place
  *     several calls on one window on-chain -- a unique key there would reject
  *     legitimate rows. The one-per-window rule is a SCORING cap, enforced by the
  *     pure engine, so here it is only an index.

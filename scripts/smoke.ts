@@ -1,7 +1,7 @@
 /**
  * `pnpm smoke` — the canary for the whole project.
  *
- * PLAN.md Phase 1 exit gate: markets -> place a min-stake call with the dev
+ * The Phase 1 exit gate: markets -> place a min-stake call with the dev
  * burner -> poll until settled -> print the result. Exits 0 only on a complete
  * live round-trip against Shannon.
  *

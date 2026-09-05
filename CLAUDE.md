@@ -35,7 +35,7 @@ If a command above doesn't exist yet, creating it (with this exact name) is part
 - After every change: `pnpm typecheck && pnpm lint && pnpm test`. Before claiming a feature done that touches DreamDEX: run `pnpm smoke` and paste the output in your summary.
 - Small, single-purpose commits with conventional messages (`feat:`, `fix:`, `chore:`). Judges read this repo — keep it clean.
 - If docs at https://docs.dreamdex.io/developers/event-contracts contradict AGENTS.md assumptions (e.g. order function signature, approval flow, void semantics), update `docs/dex-notes.md` with what you found, adjust the code, and say so explicitly in your summary — don't silently reconcile.
-- When genuinely blocked on a DreamDEX API ambiguity: write the exact question to `docs/questions-for-telegram.md` and move to the next task. Don't guess-and-bury.
+- When genuinely blocked on a DreamDEX API ambiguity: record the exact open question in `docs/dex-notes.md` §12 and move to the next task. Don't guess-and-bury.
 
 ## Error handling pattern
 - `packages/dex` throws `DexError` with machine `code` (e.g. `WINDOW_CLOSED`, `INSUFFICIENT_STAKE`, `INSUFFICIENT_GAS`, `ORDER_REJECTED`, `RATE_LIMITED`, `API_DOWN`) + human `message`.

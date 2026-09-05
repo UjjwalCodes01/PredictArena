@@ -6,8 +6,8 @@
  * correction a recompute rather than a repair, so this function must be
  * deterministic and idempotent -- both are pinned by tests.
  *
- * Rules, and the ambiguities they left open, are documented in
- * docs/phase2-design.md; every decision there has a test here.
+ * Every rule, and each ambiguity it resolves, is pinned by a table-driven
+ * test in scoring.test.ts — the tests are the specification.
  */
 import {
   CALIBRATION_MIN_SETTLED, POINTS_PER_WIN,

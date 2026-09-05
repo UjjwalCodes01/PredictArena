@@ -1,7 +1,7 @@
 /**
  * Live tail -- the OPTIMISATION, never the guarantee.
  *
- * PLAN.md asks for a WS subscription alongside the 45s reconciler. The division
+ * A WS subscription runs alongside the 45s reconciler by design. The division
  * of labour matters and is easy to get backwards: the poller is what makes the
  * projection correct, and this only makes it fast. So every failure mode here
  * degrades to "settlements land within 45s instead of within seconds" -- never
