@@ -191,10 +191,42 @@ export function usePlaceCall() {
         // A revert resolves rather than throwing. Without this check a failed
         // call would be recorded as pending and never resolve.
         if (receipt.status === "reverted") {
-          // A mined revert carries no reason, so this stays honest about the
-          // candidates rather than asserting one — the confident "window
-          // locked or price moved" diagnosis misled a player whose actual
-          // problem was balance.
+          // The receipt carries no reason, but the chain still can: re-run
+          // the same call at the block it mined in and the revert comes back
+          // with its selector. Best-effort — a guess-free specific message
+          // beats the confident wrong diagnosis that misled a player whose
+          // actual problem was balance, but never let diagnosis itself fail
+          // the error path.
+          const replayed = await dex.rpc
+            .call({
+              to: ready.order.to as `0x${string}`,
+              data: ready.order.data as `0x${string}`,
+              account: address,
+              blockNumber: receipt.blockNumber,
+            })
+            .then(() => null)
+            .catch((e: unknown) => e);
+
+          const { isUnfillable, isInsufficientBalance } = await import("@predictarena/dex");
+          if (replayed && isUnfillable(replayed)) {
+            setPhase({
+              kind: "error",
+              code: "NO_LIQUIDITY",
+              message: "Nothing filled — the book moved before your order landed.",
+              action: "Nothing was staked or lost besides gas. The price is fresh again; retry.",
+            });
+            return;
+          }
+          if (replayed && isInsufficientBalance(replayed)) {
+            setPhase({
+              kind: "error",
+              code: "INSUFFICIENT_STAKE",
+              message:
+                "The pool holds the full max payout until settlement, and the balance could not cover it at this price.",
+              action: "Try a smaller stake, or a likelier side.",
+            });
+            return;
+          }
           setPhase({
             kind: "error",
             code: "ORDER_REJECTED",

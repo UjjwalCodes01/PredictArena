@@ -55,6 +55,54 @@ export interface Quote {
 }
 
 /**
+ * Pad a walked quote so a small book move cannot zero the fill.
+ *
+ * Measured in production: a 10 tUSDC call quoted at the exact walked price
+ * died on-chain with ImmediateOrCancelNoFill while the same call at 1 tUSDC
+ * filled — the larger order walks deeper, and a testnet maker re-quoting one
+ * level between quote and mine left nothing matchable at a limit with zero
+ * headroom.
+ *
+ * An IOC limit is a protection bound, not a target: fills happen at each
+ * resting order's own price. So the pad — max(2 ticks, ~1%) — costs nothing
+ * when the book has not moved. The quantity is then re-sized against the
+ * PADDED price, which keeps the invariant a stake-first product owes its
+ * players: whatever the book does inside the tolerance, the spend can never
+ * exceed the stake they chose. The price of the protection is a sliver of
+ * size (~1% fewer contracts), which beats a revert and burned gas.
+ */
+export function protectQuote(
+  q: { limitPrice: bigint; quantity: bigint; escrow: bigint },
+  grid: { tickSize: bigint; lotSize: bigint },
+  oneCollateral: bigint,
+  stake: bigint,
+): { limitPrice: bigint; quantity: bigint; escrow: bigint } {
+  const tick = grid.tickSize;
+  const cap = oneCollateral - tick; // a contract may never cost its own payout
+  if (tick <= 0n || q.limitPrice >= cap || q.quantity <= 0n) return q;
+
+  const tolerance = q.limitPrice / 100n > 2n * tick ? q.limitPrice / 100n : 2n * tick;
+  // Round UP to the grid so the pad is never rounded away.
+  const raw = q.limitPrice + tolerance;
+  let padded = ((raw + tick - 1n) / tick) * tick;
+  if (padded > cap) padded = cap;
+  if (padded <= q.limitPrice) return q;
+
+  // Worst case the fill happens at the padded price, so that is what the
+  // quantity must be affordable at. Floor to the lot grid; never more than
+  // the depth the walk actually saw.
+  let quantity = ((stake * oneCollateral) / padded / grid.lotSize) * grid.lotSize;
+  if (quantity > q.quantity) quantity = q.quantity;
+  if (quantity <= 0n) return q;
+
+  // Display estimate only — takers pay the fill price. Scaled with the
+  // quantity so it never overstates.
+  const escrow = (q.escrow * quantity) / q.quantity;
+
+  return { limitPrice: padded, quantity, escrow };
+}
+
+/**
  * Price a stake against the CHAIN's book. Returns `null` only when there is
  * genuinely nothing to fill against.
  */
@@ -73,16 +121,19 @@ export async function quoteCall(
   );
 
   const oneCollateral = 10n ** BigInt(client.collateral.decimals);
-  const quote = quoteBinaryStakeOverBook(book, sideFor(direction), stake, oneCollateral, {
+  const walked = quoteBinaryStakeOverBook(book, sideFor(direction), stake, oneCollateral, {
     tickSize: grid.tickSize,
     lotSize: grid.lotSize,
   });
-  if (!quote || quote.quantity <= 0n) return null;
+  if (!walked || walked.quantity <= 0n) return null;
 
-  if (quote.quantity < grid.minQuantity) {
+  // Headroom against the book moving between quote and mine — see protectQuote.
+  const protectedQ = protectQuote(walked, grid, oneCollateral, stake);
+
+  if (protectedQ.quantity < grid.minQuantity) {
     throw new DexError(
       "INSUFFICIENT_STAKE",
-      `Stake buys ${formatFixed(quote.quantity, client.collateral.decimals, 4)} contracts, ` +
+      `Stake buys ${formatFixed(protectedQ.quantity, client.collateral.decimals, 4)} contracts, ` +
         `below the venue minimum of ${formatFixed(grid.minQuantity, client.collateral.decimals, 4)}.`,
       { action: "Increase the stake." },
     );
@@ -90,13 +141,13 @@ export async function quoteCall(
 
   return {
     direction,
-    side: quote.side,
-    limitPrice: quote.limitPrice,
-    yesPrice: quote.yesPrice,
-    quantity: quote.quantity,
-    escrow: quote.escrow,
+    side: walked.side,
+    limitPrice: protectedQ.limitPrice,
+    yesPrice: walked.yesPrice,
+    quantity: protectedQ.quantity,
+    escrow: protectedQ.escrow,
     // Every winning contract redeems for exactly one unit of collateral.
-    maxPayout: quote.quantity,
+    maxPayout: protectedQ.quantity,
   };
 }
 
