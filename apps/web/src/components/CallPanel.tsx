@@ -269,6 +269,7 @@ export function CallPanel({
             phase={phase}
             direction={direction}
             secondsLeft={secondsLeft}
+            quote={quote}
             onPlace={() => place(w.marketId, direction, stake)}
           />
           <PhaseNote phase={phase} onDismiss={reset} />
@@ -315,7 +316,7 @@ function DirectionButton({
 }
 
 function PlaceAction({
-  disabled, isConnected, wrongNetwork, phase, direction, secondsLeft, onPlace,
+  disabled, isConnected, wrongNetwork, phase, direction, secondsLeft, quote, onPlace,
 }: {
   disabled: boolean;
   isConnected: boolean;
@@ -323,6 +324,7 @@ function PlaceAction({
   phase: ReturnType<typeof usePlaceCall>["phase"];
   direction: Direction;
   secondsLeft: number;
+  quote: QuoteDto | null;
   onPlace: () => void;
 }) {
   if (!isConnected) {
@@ -332,6 +334,16 @@ function PlaceAction({
     return <p className="text-sm text-ink-soft">Switch to Somnia Shannon to place this call.</p>;
   }
 
+  // The button states the payoff, not just the action: "Call Up · win +1.03"
+  // answers the question a player is actually weighing at the moment of the
+  // tap. Profit, not gross — the stake comes back inside the payout, and
+  // quoting the gross as a "win" would overstate it.
+  const profit = quote ? BigInt(quote.quantity) - BigInt(quote.escrow) : null;
+  const idleLabel =
+    profit !== null && profit > 0n
+      ? `Call ${direction === "UP" ? "Up" : "Down"} · win +${amount(profit.toString(), 2)} tUSDC`
+      : `Call ${direction === "UP" ? "Up" : "Down"}`;
+
   const label =
     phase.kind === "preparing" ? "Checking your balance"
     : phase.kind === "approving" ? "Approve tUSDC in your wallet"
@@ -339,7 +351,7 @@ function PlaceAction({
     : phase.kind === "confirming" ? "Placing your call"
     : phase.kind === "slow" ? "Still confirming"
     : phase.kind === "placed" ? "Call placed"
-    : `Call ${direction === "UP" ? "Up" : "Down"}`;
+    : idleLabel;
 
   return (
     <>

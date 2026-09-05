@@ -90,7 +90,14 @@ error handling that names the actual problem.
    > "Points for the win, streak multiplier, and the Brier and edge update.
    > Points are recomputed from raw settlements on every read — nothing is
    > stored, so a late correction is a recompute, not a repair."
-3. Click through to a profile.
+3. **The whole-venue beat — do not cut this line.** Scroll the board once,
+   slowly, past rows of wallets that obviously aren't yours:
+   > "And notice: one thousand three hundred players. We didn't invite them —
+   > the board scores every wallet trading these markets, from public chain
+   > fills. Place a trade through any app built on this venue and you're
+   > already ranked here. Your streak isn't a number in your browser; it's a
+   > record derived from the chain, and it can survive us."
+4. Click through to a profile.
 
 ## 1:55 — 2:15 · The AI player
 

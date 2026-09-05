@@ -45,7 +45,11 @@
       "Bash(grep -vE '^\\\\s*$' /tmp/claude-1000/-home-ujwal-Desktop-coding-PredictArena/2a5cfec9-0aac-4534-8fdd-2e78ff9a33c6/tasks/bx00tv35f.output)",
       "Bash(curl -s --max-time 65 -w \"\\\\nHTTP %{http_code}\\\\n\" \"http://localhost:3000/api/ai/run\")",
       "Bash([ -f \"$F\" ])",
-      "Bash([ -s \"$B\" ])"
+      "Bash([ -s \"$B\" ])",
+      "Bash(awk '/^function PlaceAction/,/^\\\\}/' apps/web/src/components/CallPanel.tsx)",
+      "Bash(curl -s --max-time 40 \"https://predictarena-gamma.vercel.app/api/ai\")",
+      "Bash(curl -s --max-time 40 \"https://predictarena-gamma.vercel.app/api/standings\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(' ', d['status'], '|', ', '.join\\(f\\\\\"{k}:{v['status']}\\\\\" for k,v in d['checks'].items\\(\\)\\)\\)\")"
     ],
     "additionalDirectories": [
       "/home/ujwal/Desktop/coding/PredictArena/packages/db/src"
