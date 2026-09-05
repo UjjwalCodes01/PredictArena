@@ -265,3 +265,63 @@ describe("runAgent", () => {
     expect(recorded()["windowId"]).toBe("0xsoon");
   });
 });
+
+describe("injected window discovery", () => {
+  // The default — asking the venue's indexer — was the forecaster's single
+  // point of failure: it managed four looks in three days because discovery
+  // died during every venue wobble, while the site itself kept working
+  // through its chain fallback. The seam these pin is what lets the agent
+  // ride that same fallback.
+
+  it("uses the injected source and leaves the default untouched", async () => {
+    const listWindows = vi.fn().mockResolvedValue([window("0xw1")]);
+    model.forecastWindow.mockResolvedValue(confident());
+
+    const run = await runAgent({ ...opts(), listWindows });
+
+    expect(listWindows).toHaveBeenCalledWith("BTC");
+    expect(dex.getWindows).not.toHaveBeenCalled();
+    expect(run.considered).toBe(1);
+  });
+
+  it("still applies its own tradability filter to whatever it is handed", async () => {
+    // The web app's discovery includes untradable windows (the feed shows
+    // them greyed out); the forecaster must never spend on one.
+    const listWindows = vi.fn().mockResolvedValue([
+      { ...window("0xdead"), isTradable: false },
+      window("0xlive"),
+    ]);
+    model.forecastWindow.mockResolvedValue(confident());
+
+    const run = await runAgent({ ...opts(), listWindows });
+
+    expect(run.considered).toBe(1);
+    expect(recorded(0)["windowId"]).toBe("0xlive");
+  });
+
+  it("a failing source for one asset is a note, not a crash", async () => {
+    const listWindows = vi.fn()
+      .mockRejectedValueOnce(new Error("venue and chain both down"))
+      .mockResolvedValueOnce([window("0xeth", "ETH")]);
+    model.forecastWindow.mockResolvedValue(confident());
+
+    const run = await runAgent({
+      ...opts(),
+      assets: ["BTC", "ETH"],
+      listWindows,
+    } as unknown as Parameters<typeof runAgent>[0]);
+
+    expect(run.considered).toBe(1);
+    expect(run.notes.join(" ")).toMatch(/venue and chain both down/);
+  });
+
+  it("without an injection, discovery behaves exactly as before", async () => {
+    dex.getWindows.mockResolvedValue([window("0xw1")]);
+    model.forecastWindow.mockResolvedValue(confident());
+
+    const run = await runAgent(opts());
+
+    expect(dex.getWindows).toHaveBeenCalledWith(expect.anything(), { asset: "BTC", limit: 20 });
+    expect(run.considered).toBe(1);
+  });
+});

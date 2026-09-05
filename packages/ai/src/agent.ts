@@ -49,6 +49,19 @@ export interface AgentOptions {
   readonly assets: readonly string[];
   readonly maxForecasts?: number;
   readonly maxPlacements?: number;
+  /**
+   * Window discovery, injectable because the default — asking the venue's
+   * indexer — was the forecaster's single point of failure. The web app has a
+   * discovery path that falls back to reading the chain when that indexer
+   * hangs (measured hanging at random, for most of a week); passing it here
+   * lets the forecaster keep seeing windows through the same outages the
+   * site itself survives. Four forecasts in three days was not discipline —
+   * it was blindness.
+   *
+   * Whatever the source, the agent still applies its own tradability and
+   * headroom checks to every window it is handed.
+   */
+  readonly listWindows?: (asset: string) => Promise<readonly Window[]>;
 }
 
 export interface AgentRun {
@@ -84,11 +97,15 @@ export async function runAgent(opts: AgentOptions): Promise<AgentRun> {
 
   const decimals = dex.collateral.decimals;
 
-  // Live, tradable windows across the assets we follow.
+  const listWindows =
+    opts.listWindows ?? ((asset: string) => getWindows(dex, { asset, limit: 20 }));
+
+  // Live, tradable windows across the assets we follow. The tradability and
+  // headroom filters apply regardless of where the windows came from.
   const live: Window[] = [];
   for (const asset of assets) {
     try {
-      const found = await getWindows(dex, { asset, limit: 20 });
+      const found = await listWindows(asset);
       live.push(...found.filter((w) => w.isTradable && hasRoom(w)));
     } catch (e) {
       notes.push(`${asset}: ${e instanceof Error ? e.message.slice(0, 80) : "unreadable"}`);

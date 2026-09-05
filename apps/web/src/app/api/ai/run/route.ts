@@ -3,6 +3,7 @@ import { getSyncState, acquireLease } from "@predictarena/db";
 import { runAgent, isConfigured } from "@predictarena/ai";
 import { parseAmount } from "@predictarena/dex";
 import { serverDb, aiDex, dbRead, withDeadline, ensureLiveNetwork } from "@/lib/server";
+import { windowsFor } from "@/lib/windows";
 import { rateLimit, clientKey, tooManyRequests } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
@@ -117,6 +118,12 @@ export async function GET(request: Request): Promise<NextResponse> {
         wallet: ai.wallet,
         stake,
         assets: ["BTC", "ETH"],
+        // The same discovery the player-facing feed uses: venue first, chain
+        // fallback when the venue's indexer hangs, one shared cache and
+        // circuit breaker. Without this the forecaster went blind during
+        // every venue wobble — it managed four looks in three days while the
+        // site itself sailed through on the fallback.
+        listWindows: (asset) => windowsFor(ai.dex, { asset }),
       }),
     );
 
