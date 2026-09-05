@@ -191,11 +191,17 @@ export function usePlaceCall() {
         // A revert resolves rather than throwing. Without this check a failed
         // call would be recorded as pending and never resolve.
         if (receipt.status === "reverted") {
+          // A mined revert carries no reason, so this stays honest about the
+          // candidates rather than asserting one — the confident "window
+          // locked or price moved" diagnosis misled a player whose actual
+          // problem was balance.
           setPhase({
             kind: "error",
             code: "ORDER_REJECTED",
             message: "The order was rejected on-chain.",
-            action: "Usually the window locked or the price moved. Try the next window.",
+            action:
+              "The window may have locked, the price moved, or the balance could not cover " +
+              "the max payout the pool escrows. Try a smaller stake or the next window.",
           });
           return;
         }
@@ -223,7 +229,21 @@ export function usePlaceCall() {
         }
         // The SDK may not have loaded if the failure happened before its
         // import resolved, so it is fetched here rather than assumed present.
-        const { DexError } = await import("@predictarena/dex");
+        const { DexError, isInsufficientBalance } = await import("@predictarena/dex");
+        // The wallet simulates before sending, so this arrives as a thrown
+        // revert with data — decodable, unlike a mined revert's receipt.
+        // Preflight normally refuses it first; this covers a balance that
+        // changed between the check and the send.
+        if (isInsufficientBalance(e)) {
+          setPhase({
+            kind: "error",
+            code: "INSUFFICIENT_STAKE",
+            message:
+              "The pool holds the full max payout until settlement, and your balance cannot cover it at this price.",
+            action: "Try a smaller stake, or a likelier side.",
+          });
+          return;
+        }
         if (e instanceof DexError) {
           setPhase({
             kind: "error",

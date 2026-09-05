@@ -63,6 +63,14 @@ export function CallPanel({
     !balances || balances.collateral >= BigInt(whole) * COLLATERAL_UNIT;
   const cannotAffordAny = balances ? !affordable(STAKE_PRESETS[0]) : false;
 
+  // The pool escrows the full contract count — the max payout — until the
+  // window settles, then refunds the difference. On a long shot that is many
+  // times the stake (measured: 10 tUSDC at 2c tried to pull 263), so a wallet
+  // that easily affords the stake can still fail here. Caught at render time,
+  // because learning it from a failed transaction costs gas and trust.
+  const escrowShort =
+    quote !== null && balances !== undefined && balances.collateral < BigInt(quote.quantity);
+
   // Re-price whenever the choice changes. The quote is an estimate: takers pay
   // the fill price, so the exact cost only exists after the fill.
   useEffect(() => {
@@ -229,11 +237,20 @@ export function CallPanel({
             ) : quoteError ? (
               <p className="text-ink-soft">{quoteError}</p>
             ) : quote ? (
-              <p className="text-ink-soft">
-                You get <span className="tabular font-medium text-ink">{amount(quote.quantity, 2)}</span> contracts.
-                {" "}If {direction === "UP" ? "Up" : "Down"} wins they pay{" "}
-                <span className="tabular font-medium text-ink">{amount(quote.maxPayout, 2)} tUSDC</span>.
-              </p>
+              <>
+                <p className="text-ink-soft">
+                  You get <span className="tabular font-medium text-ink">{amount(quote.quantity, 2)}</span> contracts.
+                  {" "}If {direction === "UP" ? "Up" : "Down"} wins they pay{" "}
+                  <span className="tabular font-medium text-ink">{amount(quote.maxPayout, 2)} tUSDC</span>.
+                </p>
+                {escrowShort ? (
+                  <p className="mt-1.5 text-warn">
+                    At this price the pool holds the full{" "}
+                    <span className="tabular">{amount(quote.quantity, 2)} tUSDC</span> until settlement
+                    (refunded after) — more than your balance. Try a smaller stake.
+                  </p>
+                ) : null}
+              </>
             ) : null}
           </div>
         </div>
@@ -243,7 +260,10 @@ export function CallPanel({
       {direction ? (
         <div className="p-4">
           <PlaceAction
-            disabled={!isConnected || wrongNetwork || !quote || busy || quoting || noGas || cannotAffordAny}
+            disabled={
+              !isConnected || wrongNetwork || !quote || busy || quoting ||
+              noGas || cannotAffordAny || escrowShort
+            }
             isConnected={isConnected}
             wrongNetwork={wrongNetwork}
             phase={phase}

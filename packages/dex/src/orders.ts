@@ -164,6 +164,23 @@ export function isUnfillable(e: unknown): boolean {
 }
 
 /**
+ * ERC-6093 `ERC20InsufficientBalance(address,uint256,uint256)`.
+ *
+ * Reaches us when the pool pulls its worst-case settlement (`quantity`) and
+ * the wallet cannot cover it — preflight now refuses this before a signature,
+ * but a balance can change between the check and the send, and other tooling
+ * calls the pool without our preflight at all. Reported specifically because
+ * the generic "window locked or price moved" text was the WRONG diagnosis in
+ * production: the fix is a smaller stake, not a faster click.
+ */
+const ERC20_INSUFFICIENT_BALANCE_SELECTOR = "0xe450d38c";
+
+export function isInsufficientBalance(e: unknown): boolean {
+  if (revertSelector(e) === ERC20_INSUFFICIENT_BALANCE_SELECTOR) return true;
+  return /erc20insufficientbalance/i.test(String(e));
+}
+
+/**
  * Mint test collateral to the connected wallet.
  *
  * The testnet tUSDC contract exposes a public `faucet(uint256)`, so any wallet
@@ -306,6 +323,32 @@ export async function preflightCall(
       "INSUFFICIENT_STAKE",
       `Need ${formatFixed(quote.escrow, d, 4)} ${client.collateral.symbol}, wallet holds ${formatFixed(balance, d, 4)}.`,
       { action: `Get ${client.collateral.symbol} from the faucet: ${LINKS.faucet}` },
+    );
+  }
+  /*
+   * The pool does not pull the escrow — it pulls `quantity`, its worst-case
+   * settlement, and refunds the difference. Same rule as the allowance below,
+   * and for the same measured reason; checking only the escrow here shipped a
+   * production failure: 89 tUSDC in the wallet, a 10 tUSDC stake on a 2c
+   * long shot, 263 contracts bought — the pool tried to pull 263 and the
+   * transaction reverted on-chain (ERC20InsufficientBalance, 0xe450d38c)
+   * AFTER preflight said everything was fine.
+   *
+   * A long shot is exactly when this bites: quantity ≈ stake / price, so the
+   * cheaper the side, the more collateral it briefly ties up. The message
+   * teaches that, because "get more from the faucet" is the wrong advice for
+   * a wallet that could afford the stake ten times over.
+   */
+  if (balance < quote.quantity) {
+    throw new DexError(
+      "INSUFFICIENT_STAKE",
+      `This price ties up ${formatFixed(quote.quantity, d, 4)} ${client.collateral.symbol} ` +
+        `until the window settles (the pool holds max payout, then refunds the difference); ` +
+        `wallet holds ${formatFixed(balance, d, 4)}.`,
+      {
+        action:
+          `Try a smaller stake, a likelier side, or top up: ${LINKS.faucet}`,
+      },
     );
   }
 
