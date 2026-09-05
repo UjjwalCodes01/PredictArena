@@ -52,25 +52,44 @@ jobs:
           case "$BASE" in http://*|https://*) ;; *) BASE="https://$BASE" ;; esac
           echo "Target: $BASE/api/cron/ingest"
 
+          # One transient failure must not paint the run red. The ingest cycle
+          # does real work against a venue indexer we have MEASURED hanging at
+          # random (a bare Market query timing out at 31s), and a red schedule
+          # that cries wolf gets ignored — which is worse than no schedule.
+          # So the transient class (503, unreachable, 5xx) gets three attempts;
+          # the deterministic class (bad secret, wrong URL) stays immediately
+          # fatal, because retrying cannot fix configuration.
+          #
           # -w writes the status on its own line so a failure names itself
           # rather than leaving an empty log to guess at.
-          STATUS=$(curl --silent --show-error --max-time 120 \
-                        --header "Authorization: Bearer $CRON_SECRET" \
-                        --output response.json \
-                        --write-out '%{http_code}' \
-                        "$BASE/api/cron/ingest") || STATUS="000"
+          STATUS="000"
+          for ATTEMPT in 1 2 3; do
+            STATUS=$(curl --silent --show-error --max-time 120 \
+                          --header "Authorization: Bearer $CRON_SECRET" \
+                          --output response.json \
+                          --write-out '%{http_code}' \
+                          "$BASE/api/cron/ingest") || STATUS="000"
 
-          echo "HTTP $STATUS"
-          cat response.json 2>/dev/null || true
-          echo
+            echo "attempt $ATTEMPT: HTTP $STATUS"
+            cat response.json 2>/dev/null || true
+            echo
+
+            case "$STATUS" in
+              200) break ;;
+              401) echo "::error::CRON_SECRET does not match the one set in the deployment."; exit 1 ;;
+              404) echo "::error::Endpoint not found. Check APP_URL, and that the deployment includes /api/cron/ingest."; exit 1 ;;
+              *)   if [ "$ATTEMPT" -lt 3 ]; then
+                     echo "Transient (HTTP $STATUS) — the venue or database may be having a moment. Retrying in 30s."
+                     sleep 30
+                   fi ;;
+            esac
+          done
 
           case "$STATUS" in
             200) ;;
-            401) echo "::error::CRON_SECRET does not match the one set in the deployment."; exit 1 ;;
-            404) echo "::error::Endpoint not found. Check APP_URL, and that the deployment includes /api/cron/ingest."; exit 1 ;;
-            503) echo "::error::The app reported a failure — see the body above. CRON_SECRET may be unset in the deployment."; exit 1 ;;
-            000) echo "::error::Could not reach $BASE at all."; exit 1 ;;
-            *)   echo "::error::Unexpected HTTP $STATUS."; exit 1 ;;
+            503) echo "::error::Three cycles in a row reported failure — see the bodies above. CRON_SECRET may be unset in the deployment, or the venue is down hard."; exit 1 ;;
+            000) echo "::error::Could not reach $BASE at all, three times."; exit 1 ;;
+            *)   echo "::error::Unexpected HTTP $STATUS after three attempts."; exit 1 ;;
           esac
 
           if ! grep -q '"ok":true' response.json; then
