@@ -772,40 +772,100 @@ export async function setSyncState(
     });
 }
 
-/** Raw calls for a week, shaped for the pure scoring engine. */
-export async function getScorableCalls(db: Database, weekId: string): Promise<ScorableCall[]> {
-  const rows = await db
-    .select({
-      id: calls.id,
-      wallet: calls.wallet,
-      windowId: calls.windowId,
-      direction: calls.direction,
-      status: calls.status,
-      placedAt: calls.placedAt,
-      weekId: calls.weekId,
-      closesAt: windows.closesAt,
-      // Together these give the price paid per contract, which is the
-      // probability the call asserted. Needed for Brier and edge.
-      stake: calls.stake,
-      quantity: calls.quantity,
-    })
-    .from(calls)
-    .innerJoin(windows, eq(calls.windowId, windows.id))
-    .where(eq(calls.weekId, weekId));
+/** Statuses that can ever score. PENDING and FAILED are invisible to the engine. */
+const SCORABLE_STATUSES: readonly CallStatus[] = ["WON", "LOST", "VOID"];
 
-  return rows.map((r) => ({
-    id: r.id,
-    wallet: r.wallet,
-    windowId: r.windowId,
-    direction: r.direction,
-    status: r.status,
-    // Numerics arrive as strings from the driver; money stays bigint.
-    stake: BigInt(r.stake ?? "0"),
-    quantity: BigInt(r.quantity ?? "0"),
-    placedAtSec: secondsOf(r.placedAt),
-    closesAtSec: secondsOf(r.closesAt),
-    weekId: r.weekId,
-  }));
+/**
+ * Deduped rows per round trip.
+ *
+ * The Neon HTTP driver refuses any response over 64MB, and these rows run
+ * ~450 bytes of JSON each, so a full page is ~18MB -- comfortably inside it.
+ * A live week currently dedupes to about 34k rows, so the normal case is a
+ * single request; the loop exists so that growth cannot quietly reintroduce
+ * the failure this query was rewritten to fix.
+ */
+const SCORABLE_PAGE_ROWS = 40_000;
+
+/**
+ * Raw calls for a week, shaped for the pure scoring engine.
+ *
+ * `computeStandings` stays authoritative and keeps its own copy of both rules
+ * below. Applying them here as well does not change any score -- it only stops
+ * us PAYING to transfer rows the engine is about to discard:
+ *
+ *  - a call that is not settled never scores, and
+ *  - only the earliest call per (wallet, window) scores, so a player cannot
+ *    back both directions and bank whichever one settles well.
+ *
+ * That is not a micro-optimisation. Selecting the week unfiltered returned
+ * 270,012 rows -- roughly 121MB of JSON -- and the driver rejected the whole
+ * response with a bare HTTP 507, which took down the leaderboard, the AI page,
+ * the share card and the startup warm-up together, and would have done so
+ * again every week from then on. The same week through this query is 34,267
+ * rows. `scorable-dedup.test.ts` pins that the two selections agree.
+ */
+export async function getScorableCalls(db: Database, weekId: string): Promise<ScorableCall[]> {
+  const out: ScorableCall[] = [];
+  // Keyset, not OFFSET. The cut is on the very columns we dedupe by, so an
+  // already-returned pair is excluded whole and a pair still to come keeps all
+  // of its candidate rows -- paging cannot change which row wins a slot.
+  let after: { wallet: string; windowId: string } | undefined;
+
+  for (;;) {
+    const page = await db
+      .selectDistinctOn([calls.wallet, calls.windowId], {
+        id: calls.id,
+        wallet: calls.wallet,
+        windowId: calls.windowId,
+        direction: calls.direction,
+        status: calls.status,
+        placedAt: calls.placedAt,
+        weekId: calls.weekId,
+        closesAt: windows.closesAt,
+        // Together these give the price paid per contract, which is the
+        // probability the call asserted. Needed for Brier and edge.
+        stake: calls.stake,
+        quantity: calls.quantity,
+      })
+      .from(calls)
+      .innerJoin(windows, eq(calls.windowId, windows.id))
+      .where(
+        and(
+          eq(calls.weekId, weekId),
+          inArray(calls.status, [...SCORABLE_STATUSES]),
+          after
+            ? sql`(${calls.wallet}, ${calls.windowId}) > (${after.wallet}, ${after.windowId})`
+            : undefined,
+        ),
+      )
+      // DISTINCT ON keeps the first row of each group, so this ORDER BY *is*
+      // the tie-break rule, and it has to match the engine's exactly: earliest
+      // whole second, then lowest id. Seconds because the engine floors to
+      // them, and ids compare byte-wise because the database collates in C.
+      .orderBy(calls.wallet, calls.windowId, sql`date_trunc('second', ${calls.placedAt})`, calls.id)
+      .limit(SCORABLE_PAGE_ROWS);
+
+    for (const r of page) {
+      out.push({
+        id: r.id,
+        wallet: r.wallet,
+        windowId: r.windowId,
+        direction: r.direction,
+        status: r.status,
+        // Numerics arrive as strings from the driver; money stays bigint.
+        stake: BigInt(r.stake ?? "0"),
+        quantity: BigInt(r.quantity ?? "0"),
+        placedAtSec: secondsOf(r.placedAt),
+        closesAtSec: secondsOf(r.closesAt),
+        weekId: r.weekId,
+      });
+    }
+
+    if (page.length < SCORABLE_PAGE_ROWS) return out;
+    // Strictly greater than the last pair, so the cursor always advances.
+    const last = page[page.length - 1]!;
+    after = { wallet: last.wallet, windowId: last.windowId };
+  }
 }
 
 /**
